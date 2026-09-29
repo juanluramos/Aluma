@@ -1,6 +1,7 @@
 import {getAllUsers, getUserById, createUser, updateUser, deleteUser} from "../../repositories/usuario/repository.js";
 import type {CreateUserDto} from "../../dtos/usuario/create-user.dto.js";
 import type {UpdateUserDto} from "../../dtos/usuario/update-user.dto.js";
+import { AppError } from "../../errors/app-error.js";
 
 /**
  * Obtiene todos los usuarios.
@@ -23,8 +24,15 @@ export async function getUsers() {
  */
 
 export async function getUser(id: number) {
-    return getUserById(id);
+    const user = await getUserById(id);
+
+    if (!user) {
+        throw new AppError("Usuario no encontrado", 404, "USER_NOT_FOUND");
+    }
+    return user;
 }
+
+
 
 /**
  * Crea un nuevo usuario.
@@ -50,19 +58,36 @@ export async function createNewUser(data: CreateUserDto) {
  * @param data - Datos a actualizar.
  * @returns El usuario actualizado.
  */
-export async function updateExistingUser(id: number, data: UpdateUserDto) {
-    return updateUser(id, data);
+/**
+ * Actualiza un usuario existente.
+ *
+ * Comprueba primero que el usuario exista.
+ * Si no existe, getUser() lanzará un AppError.
+ *
+ * @param id - El ID del usuario a actualizar.
+ * @param data - Datos del usuario que se van a actualizar.
+ * @returns El usuario actualizado.
+ */
+export async function updateExistingUser(
+  id: number,
+  data: UpdateUserDto
+) {
+  await getUser(id);
+
+  return updateUser(id, data);
 }
 
 /**
  * Elimina un usuario existente.
  *
- * En esta capa se aplicarán las reglas de negocio
- * relacionadas con la eliminación de usuarios.
+ * Comprueba primero que el usuario exista.
+ * Si no existe, getUser() lanzará un AppError.
  *
  * @param id - El ID del usuario a eliminar.
  * @returns El usuario eliminado.
  */
 export async function deleteExistingUser(id: number) {
-    return deleteUser(id);
+  await getUser(id);
+
+  return deleteUser(id);
 }

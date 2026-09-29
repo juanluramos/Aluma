@@ -81,8 +81,14 @@ export const updateUserSchema = z.object({
     .trim()
     .max(500)
     .optional(),
-});
+})
 
+.refine(
+    (data) => Object.keys(data).length > 0,
+    {
+      message: "Debe indicarse al menos un campo para actualizar",
+    }
+  );
 /**
  * Tipo TypeScript generado automáticamente
  * a partir del esquema de validación.

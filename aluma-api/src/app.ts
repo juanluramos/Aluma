@@ -1,5 +1,6 @@
 import express from "express";
 import usuarioRoutes from "./routes/usuario/routes.js";
+import { errorMiddleware } from "./middlewares/error.middleware.js";
 
 /**
  * Instancia principal de la aplicación Express.
@@ -35,8 +36,15 @@ app.get("/", (_req, res) => {
 
 app.use("/api/usuarios", usuarioRoutes);
 
-/** 
- * Inicia el servidor HTTP.
+/**
+ * Middleware global de errores.
+ *
+ * Debe registrarse después de todas las rutas.
+ */
+app.use(errorMiddleware);
+
+/**
+ * Middleware global de errores.
  */
 
 app.listen(PORT, () => {
