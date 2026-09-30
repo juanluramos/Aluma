@@ -1,6 +1,9 @@
 import express from "express";
 import usuarioRoutes from "./routes/usuario/routes.js";
 import { errorMiddleware } from "./middlewares/error.middleware.js";
+import actividadRoutes from "./routes/actividad/routes.js";
+import inscripcionActividadRoutes from "./routes/inscripcion-actividad/routes.js";
+import movimientoContableRoutes from "./routes/movimiento/routes.js";
 
 /**
  * Instancia principal de la aplicación Express.
@@ -35,6 +38,10 @@ app.get("/", (_req, res) => {
  */
 
 app.use("/api/usuarios", usuarioRoutes);
+app.use("/api/actividades", actividadRoutes);
+app.use("/api/inscripciones", inscripcionActividadRoutes);
+app.use("/api/movimientos", movimientoContableRoutes);
+
 
 /**
  * Middleware global de errores.

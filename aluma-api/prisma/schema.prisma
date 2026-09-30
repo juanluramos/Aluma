@@ -44,9 +44,14 @@ model EstadoActividad {
 }
 
 model EstadoPago {
-  id_estado_pago       Int                    @id @default(autoincrement())
-  nombre_estado        String                 @unique(map: "nombre_estado") @db.VarChar(30)
-  InscripcionActividad InscripcionActividad[]
+  id_estado_pago              Int                    @id @default(autoincrement())
+  nombre_estado               String                 @unique(map: "nombre_estado") @db.VarChar(30)
+  requiereDatosPago           Boolean                @default(false)
+  id_tipo_movimiento_generado Int?
+  TipoMovimiento              TipoMovimiento?        @relation(fields: [id_tipo_movimiento_generado], references: [id_tipo_movimiento], onDelete: Restrict, onUpdate: Restrict, map: "fk_estado_pago_tipo_movimiento")
+  InscripcionActividad        InscripcionActividad[]
+
+  @@index([id_tipo_movimiento_generado], map: "fk_estado_pago_tipo_movimiento")
 }
 
 model EstadoUsuario {
@@ -59,27 +64,30 @@ model EstadoUsuario {
 }
 
 model InscripcionActividad {
-  id_inscripcion     Int                  @id @default(autoincrement())
-  id_usuario         Int
-  id_actividad       Int
-  precioAplicado     Decimal?             @db.Decimal(10, 2)
-  id_estado_pago     Int
-  id_metodo_pago     Int?
-  apuntadoFecha      DateTime             @db.Date
-  fechaPago          DateTime?            @db.Date
-  comentario         String?              @db.Text
-  createAt           DateTime             @default(now()) @db.DateTime(0)
-  updateAt           DateTime             @default(now()) @db.DateTime(0)
-  Actividad          Actividad            @relation(fields: [id_actividad], references: [id_actividad], onUpdate: Restrict, map: "fk_inscripcion_actividad")
-  EstadoPago         EstadoPago           @relation(fields: [id_estado_pago], references: [id_estado_pago], onUpdate: Restrict, map: "fk_inscripcion_estado_pago")
-  MetodoPago         MetodoPago?          @relation(fields: [id_metodo_pago], references: [id_metodo_pago], onDelete: Restrict, onUpdate: Restrict, map: "fk_inscripcion_metodo_pago")
-  Usuario            Usuario              @relation(fields: [id_usuario], references: [id_usuario], onUpdate: Restrict, map: "fk_inscripcion_usuario")
-  MovimientoContable MovimientoContable[]
+  id_inscripcion        Int                  @id @default(autoincrement())
+  id_usuario            Int
+  id_actividad          Int
+  precioAplicado        Decimal?             @db.Decimal(10, 2)
+  id_estado_pago        Int
+  id_estado_inscripcion Int
+  id_metodo_pago        Int?
+  apuntadoFecha         DateTime             @db.Date
+  fechaPago             DateTime?            @db.Date
+  comentario            String?              @db.Text
+  createAt              DateTime             @default(now()) @db.DateTime(0)
+  updateAt              DateTime             @default(now()) @db.DateTime(0)
+  Actividad             Actividad            @relation(fields: [id_actividad], references: [id_actividad], onUpdate: Restrict, map: "fk_inscripcion_actividad")
+  EstadoInscripcion     EstadoInscripcion    @relation(fields: [id_estado_inscripcion], references: [id_estado_inscripcion], onUpdate: Restrict, map: "fk_inscripcion_estado_inscripcion")
+  EstadoPago            EstadoPago           @relation(fields: [id_estado_pago], references: [id_estado_pago], onUpdate: Restrict, map: "fk_inscripcion_estado_pago")
+  MetodoPago            MetodoPago?          @relation(fields: [id_metodo_pago], references: [id_metodo_pago], onDelete: Restrict, onUpdate: Restrict, map: "fk_inscripcion_metodo_pago")
+  Usuario               Usuario              @relation(fields: [id_usuario], references: [id_usuario], onUpdate: Restrict, map: "fk_inscripcion_usuario")
+  MovimientoContable    MovimientoContable[]
 
-  @@unique([id_usuario, id_actividad], map: "uq_usuario_actividad")
   @@index([id_actividad], map: "fk_inscripcion_actividad")
   @@index([id_estado_pago], map: "fk_inscripcion_estado_pago")
   @@index([id_metodo_pago], map: "fk_inscripcion_metodo_pago")
+  @@index([id_estado_inscripcion], map: "fk_inscripcion_estado_inscripcion")
+  @@index([id_usuario], map: "fk_inscripcion_usuario")
 }
 
 model MetodoPago {
@@ -122,6 +130,7 @@ model TipoMovimiento {
   nombre             String               @unique(map: "nombre") @db.VarChar(30)
   createAt           DateTime             @default(now()) @db.DateTime(0)
   updateAt           DateTime             @default(now()) @db.DateTime(0)
+  EstadoPago         EstadoPago[]
   MovimientoContable MovimientoContable[]
 }
 
@@ -151,4 +160,12 @@ model Usuario {
   @@index([id_estado_usuario], map: "fk_usuario_estado")
   @@index([id_rol], map: "fk_usuario_rol")
   @@index([id_tipo_documento], map: "fk_usuario_tipo_documento")
+}
+
+model EstadoInscripcion {
+  id_estado_inscripcion Int                    @id @default(autoincrement())
+  nombre                String                 @unique(map: "nombre") @db.VarChar(30)
+  createAt              DateTime               @default(now()) @db.DateTime(0)
+  updateAt              DateTime               @default(now()) @db.DateTime(0)
+  InscripcionActividad  InscripcionActividad[]
 }
