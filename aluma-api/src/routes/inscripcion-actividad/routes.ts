@@ -8,6 +8,10 @@ import {
   deleteEnrollmentController,
 } from "../../controllers/inscripcion-actividad/controller.js";
 
+import { validateBody } from "../../middlewares/validate.middleware.js";
+import { createEnrollmentSchema } from "../../dtos/inscripcion-actividad/create-enrollment.dto.js";
+import { updateEnrollmentSchema } from "../../dtos/inscripcion-actividad/update-enrollment.dto.js";
+
 const router = Router();
 
 /**
@@ -29,14 +33,18 @@ router.get("/:id", getEnrollmentByIdController);
  *
  * POST /api/inscripciones
  */
-router.post("/", createEnrollmentController);
+router.post("/", validateBody(createEnrollmentSchema),
+  createEnrollmentController
+);
 
 /**
  * Actualiza una inscripción existente.
  *
  * PUT /api/inscripciones/:id
  */
-router.put("/:id", updateEnrollmentController);
+router.put("/:id", validateBody(updateEnrollmentSchema),
+  updateEnrollmentController
+);
 
 /**
  * Elimina una inscripción existente.

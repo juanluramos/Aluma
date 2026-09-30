@@ -12,8 +12,6 @@ import {
   deleteExistingActivity,
 } from "../../services/actividad/service.js";
 
-import { createActivitySchema } from "../../dtos/actividad/create-activity.dto.js";
-import { updateActivitySchema } from "../../dtos/actividad/update-activity.dto.js";
 
 /**
  * Devuelve todas las actividades.
@@ -57,6 +55,7 @@ export async function getActivityByIdController(
     if (Number.isNaN(id)) {
       res.status(400).json({
         message: "ID de actividad inválido",
+        code: "INVALID_ID",
       });
 
       return;
@@ -83,18 +82,8 @@ export async function createActivityController(
   next: NextFunction
 ): Promise<void> {
   try {
-    const result = createActivitySchema.safeParse(req.body);
-
-    if (!result.success) {
-      res.status(400).json({
-        message: "Datos de actividad no válidos",
-        errors: result.error.issues,
-      });
-
-      return;
-    }
-
-    const activity = await createNewActivity(result.data);
+    const activity =
+      await createNewActivity(req.body);
 
     res.status(201).json(activity);
   } catch (error) {
@@ -117,37 +106,22 @@ export async function updateActivityController(
   try {
     const id = Number(req.params.id);
 
-    /**
-     * Comprobamos que el ID sea válido.
-     */
     if (Number.isNaN(id)) {
       res.status(400).json({
-        message: "ID de actividad inválido",
+        message: "ID no válido",
+        code: "INVALID_ID",
       });
 
       return;
     }
 
-    /**
-     * Validamos los datos con Zod.
-     */
-    const result = updateActivitySchema.safeParse(req.body);
+    const activity =
+      await updateExistingActivity(
+        id,
+        req.body
+      );
 
-    if (!result.success) {
-      res.status(400).json({
-        message: "Datos de actividad no válidos",
-        errors: result.error.issues,
-      });
-
-      return;
-    }
-
-    const updatedActivity = await updateExistingActivity(
-      id,
-      result.data
-    );
-
-    res.status(200).json(updatedActivity);
+    res.status(200).json(activity);
   } catch (error) {
     next(error);
   }
@@ -174,6 +148,7 @@ export async function deleteActivityController(
     if (Number.isNaN(id)) {
       res.status(400).json({
         message: "ID de actividad inválido",
+        code: "INVALID_ID",
       });
 
       return;

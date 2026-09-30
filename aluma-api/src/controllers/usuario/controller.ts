@@ -12,8 +12,6 @@ import {
   deleteExistingUser,
 } from "../../services/usuario/service.js";
 
-import { createUserSchema } from "../../dtos/usuario/create-user.dto.js";
-import { updateUserSchema } from "../../dtos/usuario/update-user.dto.js";
 
 /**
  * Devuelve todos los usuarios.
@@ -60,6 +58,7 @@ export async function getUserByIdController(
     if (Number.isNaN(id)) {
       res.status(400).json({
         message: "ID de usuario inválido",
+        code: "INVALID_ID",
       });
 
       return;
@@ -95,18 +94,8 @@ export async function createUserController(
   next: NextFunction
 ): Promise<void> {
   try {
-    const result = createUserSchema.safeParse(req.body);
-
-    if (!result.success) {
-      res.status(400).json({
-        message: "Datos de usuario no válidos",
-        errors: result.error.issues,
-      });
-
-      return;
-    }
-
-    const user = await createNewUser(result.data);
+    const user =
+      await createNewUser(req.body);
 
     res.status(201).json(user);
   } catch (error) {
@@ -129,44 +118,22 @@ export async function updateUserController(
   try {
     const id = Number(req.params.id);
 
-    /**
-     * Comprobamos que el ID sea válido.
-     */
     if (Number.isNaN(id)) {
       res.status(400).json({
-        message: "ID de usuario inválido",
+        message: "ID no válido",
+        code: "INVALID_ID",
       });
 
       return;
     }
 
+    const user =
+      await updateExistingUser(
+        id,
+        req.body
+      );
 
-    /**
-     * Validamos los datos con Zod.
-     */
-    const result = updateUserSchema.safeParse(req.body);
-
-    if (!result.success) {
-      res.status(400).json({
-        message: "Datos de usuario no válidos",
-        errors: result.error.issues,
-      });
-
-      return;
-    }
-
-    /**
- * Delegamos la actualización al Service.
- *
- * El Service comprobará que el usuario exista
- * antes de actualizarlo.
- */
-    const updatedUser = await updateExistingUser(
-      id,
-      result.data
-    );
-
-    res.status(200).json(updatedUser);
+    res.status(200).json(user);
   } catch (error) {
     next(error);
   }
@@ -193,6 +160,7 @@ export async function deleteUserController(
     if (Number.isNaN(id)) {
       res.status(400).json({
         message: "ID de usuario inválido",
+        code: "INVALID_ID",
       });
 
       return;

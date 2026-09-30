@@ -3,7 +3,7 @@ import usuarioRoutes from "./routes/usuario/routes.js";
 import { errorMiddleware } from "./middlewares/error.middleware.js";
 import actividadRoutes from "./routes/actividad/routes.js";
 import inscripcionActividadRoutes from "./routes/inscripcion-actividad/routes.js";
-import movimientoContableRoutes from "./routes/movimiento/routes.js";
+import movimientoContableRoutes from "./routes/movimiento-contable/routes.js";
 
 /**
  * Instancia principal de la aplicación Express.

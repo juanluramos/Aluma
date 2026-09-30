@@ -1,35 +1,30 @@
 import type {
-  NextFunction,
   Request,
   Response,
+  NextFunction,
 } from "express";
 
 import { Prisma } from "../generated/prisma/client.js";
+
 import { AppError } from "../errors/app-error.js";
 
+
 /**
- * Middleware global de errores.
+ * Middleware global de manejo de errores.
  *
- * Recibe los errores que se producen durante
- * la ejecución de la API y devuelve una respuesta
- * HTTP coherente al cliente.
- *
- * @param error Error recibido.
- * @param _req Petición HTTP.
- * @param res Respuesta HTTP.
- * @param _next Siguiente middleware de Express.
+ * Centraliza:
+ * - Errores de negocio mediante AppError.
+ * - Errores conocidos de Prisma.
+ * - Errores inesperados.
  */
 export function errorMiddleware(
   error: unknown,
-  _req: Request,
+  req: Request,
   res: Response,
-  _next: NextFunction
+  next: NextFunction
 ): void {
   /**
-   * Errores personalizados de la aplicación.
-   *
-   * Son errores generados por nuestra propia
-   * lógica de negocio mediante AppError.
+   * Errores controlados de la aplicación.
    */
   if (error instanceof AppError) {
     res.status(error.statusCode).json({
@@ -41,81 +36,71 @@ export function errorMiddleware(
   }
 
   /**
-   * Error P2002.
-   *
-   * Se produce cuando intentamos guardar un valor
-   * que debe ser único y ya existe.
-   *
-   * Ejemplos:
-   * - numeroDocumento duplicado
-   * - codUsuario duplicado
+   * Errores conocidos de Prisma.
    */
   if (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === "P2002"
+    error instanceof
+    Prisma.PrismaClientKnownRequestError
   ) {
-    res.status(409).json({
-      message: "Ya existe un registro con esos datos únicos",
-      code: "DUPLICATE_RESOURCE",
-    });
+    /**
+     * P2002:
+     * Restricción UNIQUE incumplida.
+     */
+    if (error.code === "P2002") {
+      res.status(409).json({
+        message:
+          "Ya existe un registro con esos datos",
+        code: "DUPLICATE_RESOURCE",
+      });
 
-    return;
+      return;
+    }
+
+    /**
+     * P2003:
+     * Restricción de clave foránea.
+     */
+    if (error.code === "P2003") {
+      res.status(409).json({
+        message:
+          "La operación incumple una relación entre datos",
+        code: "FOREIGN_KEY_CONSTRAINT",
+      });
+
+      return;
+    }
+
+    /**
+     * P2025:
+     * Registro no encontrado.
+     */
+    if (error.code === "P2025") {
+      res.status(404).json({
+        message:
+          "El recurso solicitado no existe",
+        code: "RESOURCE_NOT_FOUND",
+      });
+
+      return;
+    }
   }
 
   /**
-   * Error P2003.
+   * Error inesperado.
    *
-   * Se produce cuando una clave foránea hace referencia
-   * a un registro que no existe.
-   *
-   * Ejemplos:
-   * - id_rol inexistente
-   * - id_estado_usuario inexistente
-   * - id_tipo_documento inexistente
+   * Lo registramos en consola para poder
+   * diagnosticarlo, pero no enviamos detalles
+   * internos al cliente.
    */
-  if (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === "P2003"
-  ) {
-    res.status(409).json({
-      message: "El registro relacionado no existe",
-      code: "FOREIGN_KEY_CONSTRAINT",
-    });
-
-    return;
-  }
-
-  /**
-   * Error P2025.
-   *
-   * Se produce cuando Prisma intenta actualizar
-   * o eliminar un registro que no existe.
-   */
-  if (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === "P2025"
-  ) {
-    res.status(404).json({
-      message: "Recurso no encontrado",
-      code: "RESOURCE_NOT_FOUND",
-    });
-
-    return;
-  }
-
-  /**
-   * Error no controlado.
-   *
-   * Cualquier error que no coincida con los casos
-   * anteriores llegará aquí.
-   *
-   * Mostramos el error real en consola para desarrollo,
-   * pero no enviamos información interna al cliente.
-   */
-  console.error("Error no controlado:", error);
+  console.error(
+    "Error no controlado:",
+    error
+  );
 
   res.status(500).json({
-    message: "Error interno del servidor",
-    code: "INTERNAL_SERVER_ERROR",
+    message:
+      "Error interno del servidor",
+    code:
+      "INTERNAL_SERVER_ERROR",
   });
 }

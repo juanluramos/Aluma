@@ -142,7 +142,7 @@ model Usuario {
   nombre                      String                      @db.VarChar(50)
   apellido1                   String?                     @db.VarChar(50)
   apellido2                   String?                     @db.VarChar(50)
-  email                       String                      @db.VarChar(254)
+  email                       String                      @unique(map: "uq_usuario_email") @db.VarChar(254)
   telefono                    String?                     @db.VarChar(15)
   id_rol                      Int
   socio                       Boolean

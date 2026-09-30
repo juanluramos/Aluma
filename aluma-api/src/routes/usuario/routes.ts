@@ -2,6 +2,15 @@ import {Router} from "express";
 import {getAllUsersController,getUserByIdController,
      createUserController, updateUserController, deleteUserController
     } from "../../controllers/usuario/controller.js";
+import { validateBody } from "../../middlewares/validate.middleware.js";
+
+import {
+  createUserSchema,
+} from "../../dtos/usuario/create-user.dto.js";
+
+import {
+  updateUserSchema,
+} from "../../dtos/usuario/update-user.dto.js";
 
 /**
  * Router encargado de las rutas relacionadas con usuarios.
@@ -24,7 +33,7 @@ router.get("/:id", getUserByIdController);
  * 
  * Crea un nuevo usuario.
  */
-router.post("/", createUserController);
+router.post("/", validateBody(createUserSchema), createUserController);
 
 /**
  * Put /api/usuarios/:id
@@ -32,7 +41,13 @@ router.post("/", createUserController);
  * Actualiza un usuario existente.
  */
 
-router.put("/:id", updateUserController);
+router.post(
+  "/",
+  validateBody(createUserSchema),
+  createUserController
+);
+
+router.put("/:id", validateBody(updateUserSchema), updateUserController);
 
 /**
  * DELETE /api/usuarios/:id

@@ -12,8 +12,7 @@ import {
   deleteExistingEnrollment,
 } from "../../services/inscripcion-actividad/service.js";
 
-import { createEnrollmentSchema } from "../../dtos/inscripcion-actividad/create-enrollment.dto.js";
-import { updateEnrollmentSchema } from "../../dtos/inscripcion-actividad/update-enrollment.dto.js";
+
 
 /**
  * Devuelve todas las inscripciones.
@@ -46,6 +45,7 @@ export async function getEnrollmentByIdController(
     if (Number.isNaN(id)) {
       res.status(400).json({
         message: "ID de inscripción inválido",
+        code: "INVALID_ID",
       });
 
       return;
@@ -68,25 +68,14 @@ export async function createEnrollmentController(
   next: NextFunction
 ): Promise<void> {
   try {
-    const result = createEnrollmentSchema.safeParse(req.body);
-
-    if (!result.success) {
-      res.status(400).json({
-        message: "Datos de inscripción no válidos",
-        errors: result.error.issues,
-      });
-
-      return;
-    }
-
-    const enrollment = await createNewEnrollment(result.data);
+    const enrollment =
+      await createNewEnrollment(req.body);
 
     res.status(201).json(enrollment);
   } catch (error) {
     next(error);
   }
 }
-
 /**
  * Actualiza una inscripción existente.
  */
@@ -100,30 +89,20 @@ export async function updateEnrollmentController(
 
     if (Number.isNaN(id)) {
       res.status(400).json({
-        message: "ID de inscripción inválido",
+        message: "ID no válido",
+        code: "INVALID_ID",
       });
 
       return;
     }
 
-    const result = updateEnrollmentSchema.safeParse(req.body);
-
-    if (!result.success) {
-      res.status(400).json({
-        message: "Datos de inscripción no válidos",
-        errors: result.error.issues,
-      });
-
-      return;
-    }
-
-    const updatedEnrollment =
+    const enrollment =
       await updateExistingEnrollment(
         id,
-        result.data
+        req.body
       );
 
-    res.status(200).json(updatedEnrollment);
+    res.status(200).json(enrollment);
   } catch (error) {
     next(error);
   }
@@ -143,6 +122,7 @@ export async function deleteEnrollmentController(
     if (Number.isNaN(id)) {
       res.status(400).json({
         message: "ID de inscripción inválido",
+        code: "INVALID_ID",
       });
 
       return;

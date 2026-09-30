@@ -12,13 +12,6 @@ import {
   deleteExistingAccountingMovement,
 } from "../../services/movimiento-contable/service.js";
 
-import {
-  createAccountingMovementSchema,
-} from "../../dtos/movimiento-contable/create-accounting-movement.dto.js";
-
-import {
-  updateAccountingMovementSchema,
-} from "../../dtos/movimiento-contable/update-accounting-movement.dto.js";
 
 /**
  * Devuelve todos los movimientos contables.
@@ -51,6 +44,7 @@ export async function getAccountingMovementByIdController(
     if (Number.isNaN(id)) {
       res.status(400).json({
         message: "ID de movimiento no válido",
+        code: "INVALID_ID",
       });
 
       return;
@@ -73,20 +67,8 @@ export async function createAccountingMovementController(
   next: NextFunction
 ): Promise<void> {
   try {
-    const result =
-      createAccountingMovementSchema.safeParse(req.body);
-
-    if (!result.success) {
-      res.status(400).json({
-        message: "Datos de movimiento no válidos",
-        errors: result.error.issues,
-      });
-
-      return;
-    }
-
     const movement =
-      await createNewAccountingMovement(result.data);
+      await createNewAccountingMovement(req.body);
 
     res.status(201).json(movement);
   } catch (error) {
@@ -107,19 +89,8 @@ export async function updateAccountingMovementController(
 
     if (Number.isNaN(id)) {
       res.status(400).json({
-        message: "ID de movimiento no válido",
-      });
-
-      return;
-    }
-
-    const result =
-      updateAccountingMovementSchema.safeParse(req.body);
-
-    if (!result.success) {
-      res.status(400).json({
-        message: "Datos de movimiento no válidos",
-        errors: result.error.issues,
+        message: "ID no válido",
+        code: "INVALID_ID",
       });
 
       return;
@@ -128,7 +99,7 @@ export async function updateAccountingMovementController(
     const movement =
       await updateExistingAccountingMovement(
         id,
-        result.data
+        req.body
       );
 
     res.status(200).json(movement);
@@ -151,6 +122,7 @@ export async function deleteAccountingMovementController(
     if (Number.isNaN(id)) {
       res.status(400).json({
         message: "ID de movimiento no válido",
+        code: "INVALID_ID",
       });
 
       return;
