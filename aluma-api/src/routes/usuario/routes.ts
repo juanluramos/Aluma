@@ -4,13 +4,13 @@ import {getAllUsersController,getUserByIdController,
     } from "../../controllers/usuario/controller.js";
 import { validateBody } from "../../middlewares/validate.middleware.js";
 
-import {
-  createUserSchema,
-} from "../../dtos/usuario/create-user.dto.js";
+import {createUserSchema} from "../../dtos/usuario/create-user.dto.js";
 
-import {
-  updateUserSchema,
-} from "../../dtos/usuario/update-user.dto.js";
+import {updateUserSchema} from "../../dtos/usuario/update-user.dto.js";
+import { authenticate } from "../../middlewares/auth/authenticate.middleware.js";
+import { authorize } from "../../middlewares/auth/authorize.middleware.js";
+import { authorizeUserAccess } from "../../middlewares/auth/authorize-user.middleware.js";
+import { authorizeUserUpdate } from "../../middlewares/auth/authorize-user-update.middleware.js";
 
 /**
  * Router encargado de las rutas relacionadas con usuarios.
@@ -25,15 +25,15 @@ const router = Router();
  * /:id Devuelve un usuario por su ID.
  * 
  */
-router.get("/", getAllUsersController);
-router.get("/:id", getUserByIdController);
+router.get("/", authenticate, authorize("Operador", "Administrador"), getAllUsersController);
+router.get("/:id", authenticate, authorizeUserAccess, getUserByIdController);
 
 /**
  * Post /api/usuarios
  * 
  * Crea un nuevo usuario.
  */
-router.post("/", validateBody(createUserSchema), createUserController);
+router.post("/", authenticate, authorize("Operador", "Administrador"), createUserController);
 
 /**
  * Put /api/usuarios/:id
@@ -41,13 +41,11 @@ router.post("/", validateBody(createUserSchema), createUserController);
  * Actualiza un usuario existente.
  */
 
-router.post(
-  "/",
-  validateBody(createUserSchema),
+router.post("/", validateBody(createUserSchema),
   createUserController
 );
 
-router.put("/:id", validateBody(updateUserSchema), updateUserController);
+router.put("/:id", authenticate, authorizeUserAccess, authorizeUserUpdate, updateUserController);
 
 /**
  * DELETE /api/usuarios/:id
@@ -55,6 +53,6 @@ router.put("/:id", validateBody(updateUserSchema), updateUserController);
  * Elimina un usuario existente.    
  */
 
-router.delete("/:id", deleteUserController);
+router.delete("/:id", authenticate, authorize("Administrador"), deleteUserController);
 
 export default router;

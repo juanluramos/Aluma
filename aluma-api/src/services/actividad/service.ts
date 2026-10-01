@@ -17,7 +17,7 @@ import { AppError } from "../../errors/app-error.js";
  * @returns Lista de actividades.
  */
 export async function getActivities() {
-    
+ 
   return getAllActivities();
 }
 

@@ -1,0 +1,64 @@
+import { z } from 'zod';
+/**
+ * Esquema de validación para la creación de un nuevo usuario.
+ *
+ * Define que campos puede recibir la API
+ * cuáles son obligatorios y qué formato deben tener.
+ */
+export const createUserSchema = z.object({
+    codUsuario: z
+        .string()
+        .trim()
+        .max(10)
+        .optional(),
+    id_tipo_documento: z
+        .number()
+        .int()
+        .positive(),
+    numeroDocumento: z
+        .string()
+        .trim()
+        .min(1)
+        .max(20),
+    nombre: z
+        .string()
+        .trim()
+        .min(1)
+        .max(50),
+    apellido1: z
+        .string()
+        .trim()
+        .max(50)
+        .optional(),
+    apellido2: z
+        .string()
+        .trim()
+        .max(50)
+        .optional(),
+    email: z
+        .string()
+        .max(254),
+    telefono: z
+        .string()
+        .trim()
+        .max(15)
+        .optional(),
+    id_rol: z
+        .number()
+        .int()
+        .positive(),
+    socio: z
+        .boolean(),
+    id_estado_usuario: z
+        .number()
+        .int()
+        .positive(),
+    matriculaPagada: z
+        .boolean(),
+    comentario: z
+        .string()
+        .trim()
+        .max(500)
+        .optional(),
+});
+//# sourceMappingURL=create-user.dto.js.map
