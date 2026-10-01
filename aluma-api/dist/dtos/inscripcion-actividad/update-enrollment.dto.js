@@ -7,12 +7,14 @@ import { z } from "zod";
  * permitimos actualizaciones parciales.
  */
 export const updateEnrollmentSchema = z
-    .object({
+    .strictObject({
     id_usuario: z.number().int().positive().optional(),
     id_actividad: z.number().int().positive().optional(),
     precioAplicado: z
         .number()
         .nonnegative()
+        .max(99999999.99)
+        .multipleOf(0.01)
         .nullable()
         .optional(),
     id_estado_pago: z

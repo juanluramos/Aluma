@@ -11,8 +11,12 @@ import {
 import { validateBody } from "../../middlewares/validate.middleware.js";
 import { createEnrollmentSchema } from "../../dtos/inscripcion-actividad/create-enrollment.dto.js";
 import { updateEnrollmentSchema } from "../../dtos/inscripcion-actividad/update-enrollment.dto.js";
+import { authenticate } from "../../middlewares/auth/authenticate.middleware.js";
+import { authorize } from "../../middlewares/auth/authorize.middleware.js";
+import { authorizeEnrollmentCreate } from "../../middlewares/auth/authorize-enrollment-create.middleware.js";
 
 const router = Router();
+router.use(authenticate, authorize("Usuario", "Operador", "Administrador"));
 
 /**
  * Devuelve todas las inscripciones.
@@ -33,7 +37,7 @@ router.get("/:id", getEnrollmentByIdController);
  *
  * POST /api/inscripciones
  */
-router.post("/", validateBody(createEnrollmentSchema),
+router.post("/", validateBody(createEnrollmentSchema), authorizeEnrollmentCreate,
   createEnrollmentController
 );
 
@@ -42,7 +46,7 @@ router.post("/", validateBody(createEnrollmentSchema),
  *
  * PUT /api/inscripciones/:id
  */
-router.put("/:id", validateBody(updateEnrollmentSchema),
+router.put("/:id", authorize("Operador", "Administrador"), validateBody(updateEnrollmentSchema),
   updateEnrollmentController
 );
 
@@ -51,6 +55,6 @@ router.put("/:id", validateBody(updateEnrollmentSchema),
  *
  * DELETE /api/inscripciones/:id
  */
-router.delete("/:id", deleteEnrollmentController);
+router.delete("/:id", authorize("Administrador"), deleteEnrollmentController);
 
 export default router;

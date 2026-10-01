@@ -91,6 +91,7 @@ async function validateMovementAmount(
 export async function createNewAccountingMovement(
   data: CreateAccountingMovementDto
 ) {
+  assertIndependentMovement(data.id_inscripcion);
   await validateMovementAmount(
     data.id_tipo_movimiento,
     data.importe
@@ -108,6 +109,8 @@ export async function updateExistingAccountingMovement(
 ) {
   const currentMovement =
     await getAccountingMovement(id);
+  assertIndependentMovement(currentMovement.id_inscripcion);
+  assertIndependentMovement(data.id_inscripcion);
 
   /**
    * Calculamos el tipo e importe efectivos,
@@ -136,7 +139,18 @@ export async function updateExistingAccountingMovement(
 export async function deleteExistingAccountingMovement(
   id: number
 ) {
-  await getAccountingMovement(id);
+  const movement = await getAccountingMovement(id);
+  assertIndependentMovement(movement.id_inscripcion);
 
   return deleteAccountingMovement(id);
+}
+
+function assertIndependentMovement(enrollmentId: number | null | undefined) {
+  if (enrollmentId != null) {
+    throw new AppError(
+      "Los movimientos de inscripción solo se gestionan desde la inscripción",
+      409,
+      "ENROLLMENT_MOVEMENT_PROTECTED",
+    );
+  }
 }

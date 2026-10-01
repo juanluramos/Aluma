@@ -77,6 +77,7 @@ export async function updateAccountingMovement(
   return prisma.movimientoContable.update({
     where: {
       id_movimiento: id,
+      id_inscripcion: null,
     },
 
     data: {
@@ -116,6 +117,7 @@ export async function deleteAccountingMovement(id: number) {
   return prisma.movimientoContable.delete({
     where: {
       id_movimiento: id,
+      id_inscripcion: null,
     },
   });
 }

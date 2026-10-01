@@ -9,12 +9,15 @@ import {
 } from "../../controllers/movimiento-contable/controller.js";
 
 import { validateBody } from "../../middlewares/validate.middleware.js";
+import { authenticate } from "../../middlewares/auth/authenticate.middleware.js";
+import { authorize } from "../../middlewares/auth/authorize.middleware.js";
 
 import { createAccountingMovementSchema } from "../../dtos/movimiento-contable/create-accounting-movement.dto.js";
 
 import { updateAccountingMovementSchema } from "../../dtos/movimiento-contable/update-accounting-movement.dto.js";
 
 const router = Router();
+router.use(authenticate, authorize("Operador", "Administrador"));
 
 router.get("/", getAllAccountingMovementsController);
 
@@ -28,6 +31,6 @@ router.put("/:id", validateBody(updateAccountingMovementSchema),
   updateAccountingMovementController
 );
 
-router.delete("/:id", deleteAccountingMovementController);
+router.delete("/:id", authorize("Administrador"), deleteAccountingMovementController);
 
 export default router;

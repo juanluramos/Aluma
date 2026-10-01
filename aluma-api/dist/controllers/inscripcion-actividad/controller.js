@@ -2,9 +2,9 @@ import { getEnrollments, getEnrollment, createNewEnrollment, updateExistingEnrol
 /**
  * Devuelve todas las inscripciones.
  */
-export async function getAllEnrollmentsController(_req, res, next) {
+export async function getAllEnrollmentsController(req, res, next) {
     try {
-        const enrollments = await getEnrollments();
+        const enrollments = await getEnrollments(req.user?.rol === "Usuario" ? req.user.id_usuario : undefined);
         res.status(200).json(enrollments);
     }
     catch (error) {
@@ -17,14 +17,14 @@ export async function getAllEnrollmentsController(_req, res, next) {
 export async function getEnrollmentByIdController(req, res, next) {
     try {
         const id = Number(req.params.id);
-        if (Number.isNaN(id)) {
+        if (!Number.isSafeInteger(id) || id <= 0) {
             res.status(400).json({
                 message: "ID de inscripción inválido",
                 code: "INVALID_ID",
             });
             return;
         }
-        const enrollment = await getEnrollment(id);
+        const enrollment = await getEnrollment(id, req.user?.rol === "Usuario" ? req.user.id_usuario : undefined);
         res.status(200).json(enrollment);
     }
     catch (error) {
@@ -49,7 +49,7 @@ export async function createEnrollmentController(req, res, next) {
 export async function updateEnrollmentController(req, res, next) {
     try {
         const id = Number(req.params.id);
-        if (Number.isNaN(id)) {
+        if (!Number.isSafeInteger(id) || id <= 0) {
             res.status(400).json({
                 message: "ID no válido",
                 code: "INVALID_ID",
@@ -69,7 +69,7 @@ export async function updateEnrollmentController(req, res, next) {
 export async function deleteEnrollmentController(req, res, next) {
     try {
         const id = Number(req.params.id);
-        if (Number.isNaN(id)) {
+        if (!Number.isSafeInteger(id) || id <= 0) {
             res.status(400).json({
                 message: "ID de inscripción inválido",
                 code: "INVALID_ID",

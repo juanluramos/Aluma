@@ -3,7 +3,7 @@ import { z } from "zod";
  * Esquema de validación para crear
  * una inscripción a una actividad.
  */
-export const createEnrollmentSchema = z.object({
+export const createEnrollmentSchema = z.strictObject({
     /**
      * Usuario que se inscribe.
      */
@@ -24,6 +24,8 @@ export const createEnrollmentSchema = z.object({
     precioAplicado: z
         .number()
         .nonnegative()
+        .max(99999999.99)
+        .multipleOf(0.01)
         .nullable()
         .optional(),
     /**

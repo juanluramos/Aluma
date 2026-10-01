@@ -1,219 +1,96 @@
 import { prisma } from '../../config/prisma.js';
-/**
- * Obtiene todas las inscripciones.
- *
- * @returns Lista de inscripciones.
- */
-export async function getAllEnrollments() {
-    return prisma.inscripcionActividad.findMany();
+import { Prisma } from '../../generated/prisma/client.js';
+import { AppError } from '../../errors/app-error.js';
+// Las lecturas de negocio y las escrituras comparten aislamiento y reintento.
+export async function withEnrollmentTransaction(operation) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+            return await prisma.$transaction(operation, { isolationLevel: 'Serializable' });
+        }
+        catch (error) {
+            if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2034') {
+                throw error;
+            }
+        }
+    }
+    throw new AppError('Conflicto concurrente; vuelve a intentar la operación', 409, 'CONCURRENT_ENROLLMENT_UPDATE');
 }
-/**
- * Obtiene una inscripción por su ID.
- *
- * @param id - ID de la inscripción.
- * @returns La inscripción encontrada o null.
- */
-export async function getEnrollmentById(id) {
-    return prisma.inscripcionActividad.findUnique({
-        where: {
-            id_inscripcion: id,
-        },
+export async function getAllEnrollments(userId) {
+    return prisma.inscripcionActividad.findMany({
+        where: userId === undefined ? {} : { id_usuario: userId },
     });
 }
-/**
- * Crea una nueva inscripción.
- *
- * @param data - Datos validados de la inscripción.
- * @returns La inscripción creada.
- */
-export async function createEnrollment(data, enrollmentStatusId) {
-    return prisma.inscripcionActividad.create({
+export async function getEnrollmentById(id, db = prisma) {
+    return db.inscripcionActividad.findUnique({ where: { id_inscripcion: id } });
+}
+export async function getEnrollmentWithMovements(id, db) {
+    return db.inscripcionActividad.findUnique({
+        where: { id_inscripcion: id },
+        include: { MovimientoContable: { include: { TipoMovimiento: true } } },
+    });
+}
+export async function createEnrollment(data, enrollmentStatusId, db) {
+    return db.inscripcionActividad.create({
         data: {
-            id_usuario: data.id_usuario,
-            id_actividad: data.id_actividad,
-            id_estado_pago: data.id_estado_pago,
+            ...enrollmentFields(data),
+            id_usuario: data.id_usuario, id_actividad: data.id_actividad,
+            id_estado_pago: data.id_estado_pago, apuntadoFecha: data.apuntadoFecha,
             id_estado_inscripcion: enrollmentStatusId,
-            apuntadoFecha: data.apuntadoFecha,
-            ...(data.precioAplicado !== undefined && {
-                precioAplicado: data.precioAplicado,
-            }),
-            ...(data.id_metodo_pago !== undefined && {
-                id_metodo_pago: data.id_metodo_pago,
-            }),
-            ...(data.fechaPago !== undefined && {
-                fechaPago: data.fechaPago,
-            }),
-            ...(data.comentario !== undefined && {
-                comentario: data.comentario,
-            }),
         },
     });
 }
-/**
- * Actualiza una inscripción existente.
- *
- * Solo se envían a Prisma los campos
- * que realmente hayan sido recibidos.
- *
- * @param id - ID de la inscripción.
- * @param data - Datos a actualizar.
- * @returns La inscripción actualizada.
- */
-export async function updateEnrollment(id, data) {
-    return prisma.inscripcionActividad.update({
-        where: {
-            id_inscripcion: id,
-        },
-        data: {
-            ...(data.id_usuario !== undefined && {
-                id_usuario: data.id_usuario,
-            }),
-            ...(data.id_actividad !== undefined && {
-                id_actividad: data.id_actividad,
-            }),
-            ...(data.precioAplicado !== undefined && {
-                precioAplicado: data.precioAplicado,
-            }),
-            ...(data.id_estado_pago !== undefined && {
-                id_estado_pago: data.id_estado_pago,
-            }),
-            ...(data.id_metodo_pago !== undefined && {
-                id_metodo_pago: data.id_metodo_pago,
-            }),
-            ...(data.apuntadoFecha !== undefined && {
-                apuntadoFecha: data.apuntadoFecha,
-            }),
-            ...(data.fechaPago !== undefined && {
-                fechaPago: data.fechaPago,
-            }),
-            ...(data.comentario !== undefined && {
-                comentario: data.comentario,
-            }),
-            ...(data.id_estado_inscripcion !== undefined && {
-                id_estado_inscripcion: data.id_estado_inscripcion,
-            }),
-            ...(data.id_estado_inscripcion !== undefined && {
-                id_estado_inscripcion: data.id_estado_inscripcion,
-            }),
-        },
+export async function updateEnrollment(id, data, db) {
+    return db.inscripcionActividad.update({ where: { id_inscripcion: id }, data: enrollmentFields(data) });
+}
+function enrollmentFields(data) {
+    return {
+        ...(data.id_usuario !== undefined && { id_usuario: data.id_usuario }),
+        ...(data.id_actividad !== undefined && { id_actividad: data.id_actividad }),
+        ...(data.precioAplicado !== undefined && { precioAplicado: data.precioAplicado }),
+        ...(data.id_estado_pago !== undefined && { id_estado_pago: data.id_estado_pago }),
+        ...(data.id_estado_inscripcion !== undefined && { id_estado_inscripcion: data.id_estado_inscripcion }),
+        ...(data.id_metodo_pago !== undefined && { id_metodo_pago: data.id_metodo_pago }),
+        ...(data.apuntadoFecha !== undefined && { apuntadoFecha: data.apuntadoFecha }),
+        ...(data.fechaPago !== undefined && { fechaPago: data.fechaPago }),
+        ...(data.comentario !== undefined && { comentario: data.comentario }),
+    };
+}
+export async function createEnrollmentMovement(id, movement, db) {
+    return db.movimientoContable.create({ data: { ...movement, id_inscripcion: id } });
+}
+export async function updateEnrollmentWithMovement(id, data, movement, db) {
+    // Reutilizar la escritura evita omitir id_estado_inscripcion al cerrar.
+    const enrollment = await updateEnrollment(id, data, db);
+    await createEnrollmentMovement(id, movement, db);
+    return enrollment;
+}
+export async function deleteEnrollment(id, db) {
+    return db.inscripcionActividad.delete({ where: { id_inscripcion: id } });
+}
+export async function getPaymentStatusById(id, db) {
+    return db.estadoPago.findUnique({
+        where: { id_estado_pago: id }, include: { TipoMovimiento: true },
     });
 }
-/**
- * Elimina una inscripción por su ID.
- *
- * @param id - ID de la inscripción.
- * @returns La inscripción eliminada.
- */
-export async function deleteEnrollment(id) {
-    return prisma.inscripcionActividad.delete({
-        where: {
-            id_inscripcion: id,
-        },
-    });
-}
-/**
- * Obtiene un estado de pago por su ID
- * incluyendo el tipo de movimiento asociado.
- *
- * @param id - ID del estado de pago.
- */
-export async function getPaymentStatusById(id) {
-    return prisma.estadoPago.findUnique({
-        where: {
-            id_estado_pago: id,
-        },
-        include: {
-            TipoMovimiento: true,
-        },
-    });
-}
-/**
- * Actualiza una inscripción y crea su movimiento contable
- * dentro de una única transacción.
- *
- * Si una de las dos operaciones falla,
- * Prisma deshace ambas.
- */
-export async function updateEnrollmentWithMovement(id, data, movement) {
-    return prisma.$transaction(async (tx) => {
-        /**
-         * 1. Actualizamos la inscripción.
-         */
-        const updatedEnrollment = await tx.inscripcionActividad.update({
-            where: {
-                id_inscripcion: id,
-            },
-            data: {
-                ...(data.id_usuario !== undefined && {
-                    id_usuario: data.id_usuario,
-                }),
-                ...(data.id_actividad !== undefined && {
-                    id_actividad: data.id_actividad,
-                }),
-                ...(data.precioAplicado !== undefined && {
-                    precioAplicado: data.precioAplicado,
-                }),
-                ...(data.id_estado_pago !== undefined && {
-                    id_estado_pago: data.id_estado_pago,
-                }),
-                ...(data.id_metodo_pago !== undefined && {
-                    id_metodo_pago: data.id_metodo_pago,
-                }),
-                ...(data.apuntadoFecha !== undefined && {
-                    apuntadoFecha: data.apuntadoFecha,
-                }),
-                ...(data.fechaPago !== undefined && {
-                    fechaPago: data.fechaPago,
-                }),
-                ...(data.comentario !== undefined && {
-                    comentario: data.comentario,
-                }),
-            },
-        });
-        /**
-         * 2. Creamos el movimiento contable asociado.
-         */
-        await tx.movimientoContable.create({
-            data: {
-                id_tipo_movimiento: movement.id_tipo_movimiento,
-                concepto: movement.concepto,
-                importe: movement.importe,
-                fecha: movement.fecha,
-                id_inscripcion: id,
-            },
-        });
-        return updatedEnrollment;
-    });
-}
-/**
- * Busca una inscripción activa para un usuario y una actividad.
- *
- * @param userId - ID del usuario.
- * @param activityId - ID de la actividad.
- * @returns La inscripción activa encontrada o null.
- */
-export async function getActiveEnrollmentByUserAndActivity(userId, activityId) {
-    return prisma.inscripcionActividad.findFirst({
+export async function getActiveEnrollmentByUserAndActivity(userId, activityId, db, excludedId) {
+    return db.inscripcionActividad.findFirst({
         where: {
             id_usuario: userId,
             id_actividad: activityId,
-            EstadoInscripcion: {
-                nombre: 'Activa',
-            },
+            EstadoInscripcion: { nombre: 'Activa' },
+            ...(excludedId !== undefined && { id_inscripcion: { not: excludedId } }),
         },
     });
 }
-/**
- * Obtiene un estado de inscripción por su nombre.
- *
- * @param name - Nombre del estado.
- * @returns El estado encontrado o null.
- */
-export async function getEnrollmentStatusByName(name) {
-    return prisma.estadoInscripcion.findUnique({
-        where: {
-            nombre: name,
-        },
-    });
+export async function getEnrollmentStatusByName(name, db) {
+    return db.estadoInscripcion.findUnique({ where: { nombre: name } });
+}
+export async function getEnrollmentReferences(userId, activityId, statusId, methodId, db) {
+    return {
+        user: await db.usuario.findUnique({ where: { id_usuario: userId }, select: { id_usuario: true } }),
+        activity: await db.actividad.findUnique({ where: { id_actividad: activityId }, select: { id_actividad: true } }),
+        status: await db.estadoInscripcion.findUnique({ where: { id_estado_inscripcion: statusId } }),
+        method: methodId === null ? null : await db.metodoPago.findUnique({ where: { id_metodo_pago: methodId } }),
+    };
 }
 //# sourceMappingURL=repository.js.map

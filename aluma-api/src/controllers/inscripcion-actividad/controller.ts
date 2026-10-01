@@ -18,12 +18,14 @@ import {
  * Devuelve todas las inscripciones.
  */
 export async function getAllEnrollmentsController(
-  _req: Request,
+  req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> {
   try {
-    const enrollments = await getEnrollments();
+    const enrollments = await getEnrollments(
+      req.user?.rol === "Usuario" ? req.user.id_usuario : undefined,
+    );
 
     res.status(200).json(enrollments);
   } catch (error) {
@@ -42,7 +44,7 @@ export async function getEnrollmentByIdController(
   try {
     const id = Number(req.params.id);
 
-    if (Number.isNaN(id)) {
+    if (!Number.isSafeInteger(id) || id <= 0) {
       res.status(400).json({
         message: "ID de inscripción inválido",
         code: "INVALID_ID",
@@ -51,7 +53,9 @@ export async function getEnrollmentByIdController(
       return;
     }
 
-    const enrollment = await getEnrollment(id);
+    const enrollment = await getEnrollment(
+      id, req.user?.rol === "Usuario" ? req.user.id_usuario : undefined,
+    );
 
     res.status(200).json(enrollment);
   } catch (error) {
@@ -87,7 +91,7 @@ export async function updateEnrollmentController(
   try {
     const id = Number(req.params.id);
 
-    if (Number.isNaN(id)) {
+    if (!Number.isSafeInteger(id) || id <= 0) {
       res.status(400).json({
         message: "ID no válido",
         code: "INVALID_ID",
@@ -119,7 +123,7 @@ export async function deleteEnrollmentController(
   try {
     const id = Number(req.params.id);
 
-    if (Number.isNaN(id)) {
+    if (!Number.isSafeInteger(id) || id <= 0) {
       res.status(400).json({
         message: "ID de inscripción inválido",
         code: "INVALID_ID",
