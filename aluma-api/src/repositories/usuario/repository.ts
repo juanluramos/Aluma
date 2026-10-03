@@ -1,4 +1,5 @@
 import {prisma} from "../../config/prisma.js";
+import type { Prisma } from "../../generated/prisma/client.js";
 import type {CreateUserDto} from "../../dtos/usuario/create-user.dto.js";
 import type {UpdateUserDto} from "../../dtos/usuario/update-user.dto.js";
 
@@ -18,8 +19,8 @@ export async function getAllUsers() {
  * @returns El usuario encontrado o null si no existe.
  */
 
-export async function getUserById(id: number) {
-    return prisma.usuario.findUnique({
+export async function getUserById(id: number, client: Prisma.TransactionClient = prisma) {
+    return client.usuario.findUnique({
         where: { 
             id_usuario: id },
     });
@@ -35,8 +36,8 @@ export async function getUserById(id: number) {
  * @returns El usuario creado.
  */
 
-export async function createUser(data: CreateUserDto) {
-    return prisma.usuario.create({
+export async function createUser(data: CreateUserDto, client: Prisma.TransactionClient = prisma) {
+    return client.usuario.create({
         data: {
             id_tipo_documento: data.id_tipo_documento,
             numeroDocumento: data.numeroDocumento,
@@ -107,9 +108,10 @@ export interface UpdateUserData {
  */
 export async function updateUser(
   id: number,
-  data: UpdateUserDto
+  data: UpdateUserDto,
+  client: Prisma.TransactionClient = prisma
 ) {
-  return prisma.usuario.update({
+  return client.usuario.update({
     where: {
       id_usuario: id,
     },
@@ -175,8 +177,8 @@ export async function updateUser(
  * @param id ID del usuario a eliminar.
  * @returns El usuario eliminado.
  */
-export async function deleteUser(id: number) {
-    return prisma.usuario.delete({
+export async function deleteUser(id: number, client: Prisma.TransactionClient = prisma) {
+    return client.usuario.delete({
         where: {
             id_usuario: id
         }

@@ -10,8 +10,8 @@ export async function getAllAccountingMovements() {
  *
  * @param id - ID del movimiento.
  */
-export async function getAccountingMovementById(id) {
-    return prisma.movimientoContable.findUnique({
+export async function getAccountingMovementById(id, client = prisma) {
+    return client.movimientoContable.findUnique({
         where: {
             id_movimiento: id,
         },
@@ -25,8 +25,8 @@ export async function getAccountingMovementById(id) {
  *
  * @param id - ID del tipo de movimiento.
  */
-export async function getMovementTypeById(id) {
-    return prisma.tipoMovimiento.findUnique({
+export async function getMovementTypeById(id, client = prisma) {
+    return client.tipoMovimiento.findUnique({
         where: {
             id_tipo_movimiento: id,
         },
@@ -37,8 +37,8 @@ export async function getMovementTypeById(id) {
  *
  * @param data - Datos validados del movimiento.
  */
-export async function createAccountingMovement(data) {
-    return prisma.movimientoContable.create({
+export async function createAccountingMovement(data, client = prisma) {
+    return client.movimientoContable.create({
         data: {
             id_tipo_movimiento: data.id_tipo_movimiento,
             concepto: data.concepto,
@@ -59,8 +59,8 @@ export async function createAccountingMovement(data) {
  * @param id - ID del movimiento.
  * @param data - Campos que se desean modificar.
  */
-export async function updateAccountingMovement(id, data) {
-    return prisma.movimientoContable.update({
+export async function updateAccountingMovement(id, data, client = prisma) {
+    return client.movimientoContable.update({
         where: {
             id_movimiento: id,
             id_inscripcion: null,
@@ -92,8 +92,8 @@ export async function updateAccountingMovement(id, data) {
  *
  * @param id - ID del movimiento.
  */
-export async function deleteAccountingMovement(id) {
-    return prisma.movimientoContable.delete({
+export async function deleteAccountingMovement(id, client = prisma) {
+    return client.movimientoContable.delete({
         where: {
             id_movimiento: id,
             id_inscripcion: null,

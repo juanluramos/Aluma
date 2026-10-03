@@ -6,10 +6,12 @@ import inscripcionActividadRoutes from "./routes/inscripcion-actividad/routes.js
 import movimientoContableRoutes from "./routes/movimiento-contable/routes.js";
 import authRouter from "./routes/auth/routes.js";
 import { requestLogger } from "./middlewares/request-logger.middleware.js";
+import { requestId } from "./middlewares/request-id.middleware.js";
 /**
  * Instancia principal de la aplicación Express.
  */
 const app = express();
+app.use(requestId);
 app.use(requestLogger);
 /**
  * Puerto en el que se ejecutará la API.

@@ -11,6 +11,7 @@ import {
   updateExistingAccountingMovement,
   deleteExistingAccountingMovement,
 } from "../../services/movimiento-contable/service.js";
+import { AppError } from "../../errors/app-error.js";
 
 
 /**
@@ -67,8 +68,15 @@ export async function createAccountingMovementController(
   next: NextFunction
 ): Promise<void> {
   try {
+    if (!req.user) {
+      throw new AppError("Usuario no autenticado", 401, "AUTHENTICATION_REQUIRED");
+    }
     const movement =
-      await createNewAccountingMovement(req.body);
+      await createNewAccountingMovement(req.body, {
+        requestId: req.requestId,
+        id_usuario: req.user.id_usuario,
+        rol_actor: req.user.rol,
+      });
 
     res.status(201).json(movement);
   } catch (error) {
@@ -96,10 +104,18 @@ export async function updateAccountingMovementController(
       return;
     }
 
+    if (!req.user) {
+      throw new AppError("Usuario no autenticado", 401, "AUTHENTICATION_REQUIRED");
+    }
     const movement =
       await updateExistingAccountingMovement(
         id,
-        req.body
+        req.body,
+        {
+          requestId: req.requestId,
+          id_usuario: req.user.id_usuario,
+          rol_actor: req.user.rol,
+        }
       );
 
     res.status(200).json(movement);
@@ -128,7 +144,14 @@ export async function deleteAccountingMovementController(
       return;
     }
 
-    await deleteExistingAccountingMovement(id);
+    if (!req.user) {
+      throw new AppError("Usuario no autenticado", 401, "AUTHENTICATION_REQUIRED");
+    }
+    await deleteExistingAccountingMovement(id, {
+      requestId: req.requestId,
+      id_usuario: req.user.id_usuario,
+      rol_actor: req.user.rol,
+    });
 
     res.status(204).send();
   } catch (error) {

@@ -17,7 +17,8 @@ export function requestLogger(req, res, next) {
             `status=${res.statusCode} ` +
             `user=${userId} ` +
             `role=${role} ` +
-            `duration=${duration}ms`);
+            `duration=${duration}ms ` +
+            `requestId=${req.requestId}`);
     });
     next();
 }

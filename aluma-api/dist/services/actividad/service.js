@@ -1,5 +1,7 @@
 import { getAllActivities, getActivityById, createActivity, updateActivity, deleteActivity, } from "../../repositories/actividad/respository.js";
 import { AppError } from "../../errors/app-error.js";
+import { prisma } from "../../config/prisma.js";
+import { createAudit } from "../auditoria/service.js";
 /**
  * Obtiene todas las actividades.
  *
@@ -29,8 +31,22 @@ export async function getActivity(id) {
  * @param data - Datos validados de la actividad.
  * @returns La actividad creada.
  */
-export async function createNewActivity(data) {
-    return createActivity(data);
+export async function createNewActivity(data, context) {
+    return prisma.$transaction(async (tx) => {
+        const activity = await createActivity(data, tx);
+        await createAudit({
+            requestId: context.requestId,
+            id_usuario: context.id_usuario,
+            rol_actor: context.rol_actor,
+            accion: "ACTIVIDAD_CREADA",
+            recurso: "ACTIVIDAD",
+            id_recurso: activity.id_actividad,
+            resultado: "REALIZADA",
+            codigo_error: null,
+            detalles: null,
+        }, tx);
+        return activity;
+    });
 }
 /**
  * Actualiza una actividad existente.
@@ -43,9 +59,45 @@ export async function createNewActivity(data) {
  *
  * @throws AppError Si la actividad no existe.
  */
-export async function updateExistingActivity(id, data) {
-    await getActivity(id);
-    return updateActivity(id, data);
+export async function updateExistingActivity(id, data, context) {
+    return prisma.$transaction(async (tx) => {
+        const anterior = await getActivityById(id, tx);
+        if (!anterior) {
+            throw new AppError("Actividad no encontrada", 404, "ACTIVITY_NOT_FOUND");
+        }
+        const actualizado = await updateActivity(id, data, tx);
+        // Solo campos editables; normalizar fechas y decimales sin perder precision.
+        const valores = (activity) => ({
+            titulo: activity.titulo,
+            fecha: activity.fecha?.toISOString() ?? null,
+            importeSocio: activity.importeSocio?.toFixed(2) ?? null,
+            importeNoSocio: activity.importeNoSocio?.toFixed(2) ?? null,
+            id_estado_actividad: activity.id_estado_actividad,
+            comentario: activity.comentario,
+        });
+        const antes = valores(anterior);
+        const despues = valores(actualizado);
+        const cambios = {};
+        for (const campo of Object.keys(antes)) {
+            if (antes[campo] !== despues[campo]) {
+                cambios[campo] = { anterior: antes[campo], nuevo: despues[campo] };
+            }
+        }
+        if (Object.keys(cambios).length > 0) {
+            await createAudit({
+                requestId: context.requestId,
+                id_usuario: context.id_usuario,
+                rol_actor: context.rol_actor,
+                accion: "ACTIVIDAD_MODIFICADA",
+                recurso: "ACTIVIDAD",
+                id_recurso: actualizado.id_actividad,
+                resultado: "REALIZADA",
+                codigo_error: null,
+                detalles: { cambios },
+            }, tx);
+        }
+        return actualizado;
+    }, { isolationLevel: "Serializable" });
 }
 /**
  * Elimina una actividad existente.
@@ -57,8 +109,25 @@ export async function updateExistingActivity(id, data) {
  *
  * @throws AppError Si la actividad no existe.
  */
-export async function deleteExistingActivity(id) {
-    await getActivity(id);
-    return deleteActivity(id);
+export async function deleteExistingActivity(id, context) {
+    return prisma.$transaction(async (tx) => {
+        const activity = await getActivityById(id, tx);
+        if (!activity) {
+            throw new AppError("Actividad no encontrada", 404, "ACTIVITY_NOT_FOUND");
+        }
+        const deleted = await deleteActivity(activity.id_actividad, tx);
+        await createAudit({
+            requestId: context.requestId,
+            id_usuario: context.id_usuario,
+            rol_actor: context.rol_actor,
+            accion: "ACTIVIDAD_ELIMINADA",
+            recurso: "ACTIVIDAD",
+            id_recurso: activity.id_actividad,
+            resultado: "REALIZADA",
+            codigo_error: null,
+            detalles: null,
+        }, tx);
+        return deleted;
+    });
 }
 //# sourceMappingURL=service.js.map

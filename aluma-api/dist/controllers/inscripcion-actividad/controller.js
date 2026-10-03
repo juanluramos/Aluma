@@ -1,4 +1,5 @@
 import { getEnrollments, getEnrollment, createNewEnrollment, updateExistingEnrollment, deleteExistingEnrollment, } from "../../services/inscripcion-actividad/service.js";
+import { AppError } from "../../errors/app-error.js";
 /**
  * Devuelve todas las inscripciones.
  */
@@ -36,7 +37,14 @@ export async function getEnrollmentByIdController(req, res, next) {
  */
 export async function createEnrollmentController(req, res, next) {
     try {
-        const enrollment = await createNewEnrollment(req.body);
+        if (!req.user) {
+            throw new AppError("Usuario no autenticado", 401, "AUTHENTICATION_REQUIRED");
+        }
+        const enrollment = await createNewEnrollment(req.body, {
+            requestId: req.requestId,
+            id_usuario: req.user.id_usuario,
+            rol_actor: req.user.rol,
+        });
         res.status(201).json(enrollment);
     }
     catch (error) {
@@ -56,7 +64,14 @@ export async function updateEnrollmentController(req, res, next) {
             });
             return;
         }
-        const enrollment = await updateExistingEnrollment(id, req.body);
+        if (!req.user) {
+            throw new AppError("Usuario no autenticado", 401, "AUTHENTICATION_REQUIRED");
+        }
+        const enrollment = await updateExistingEnrollment(id, req.body, {
+            requestId: req.requestId,
+            id_usuario: req.user.id_usuario,
+            rol_actor: req.user.rol,
+        });
         res.status(200).json(enrollment);
     }
     catch (error) {
@@ -76,7 +91,14 @@ export async function deleteEnrollmentController(req, res, next) {
             });
             return;
         }
-        await deleteExistingEnrollment(id);
+        if (!req.user) {
+            throw new AppError("Usuario no autenticado", 401, "AUTHENTICATION_REQUIRED");
+        }
+        await deleteExistingEnrollment(id, {
+            requestId: req.requestId,
+            id_usuario: req.user.id_usuario,
+            rol_actor: req.user.rol,
+        });
         res.status(204).send();
     }
     catch (error) {

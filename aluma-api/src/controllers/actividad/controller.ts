@@ -11,6 +11,7 @@ import {
   updateExistingActivity,
   deleteExistingActivity,
 } from "../../services/actividad/service.js";
+import { AppError } from "../../errors/app-error.js";
 
 
 /**
@@ -82,8 +83,14 @@ export async function createActivityController(
   next: NextFunction
 ): Promise<void> {
   try {
-    const activity =
-      await createNewActivity(req.body);
+    if (!req.user) {
+      throw new AppError("Usuario no autenticado", 401, "AUTHENTICATION_REQUIRED");
+    }
+    const activity = await createNewActivity(req.body, {
+      requestId: req.requestId,
+      id_usuario: req.user.id_usuario,
+      rol_actor: req.user.rol,
+    });
 
     res.status(201).json(activity);
   } catch (error) {
@@ -115,10 +122,18 @@ export async function updateActivityController(
       return;
     }
 
+    if (!req.user) {
+      throw new AppError("Usuario no autenticado", 401, "AUTHENTICATION_REQUIRED");
+    }
     const activity =
       await updateExistingActivity(
         id,
-        req.body
+        req.body,
+        {
+          requestId: req.requestId,
+          id_usuario: req.user.id_usuario,
+          rol_actor: req.user.rol,
+        }
       );
 
     res.status(200).json(activity);
@@ -154,7 +169,14 @@ export async function deleteActivityController(
       return;
     }
 
-    await deleteExistingActivity(id);
+    if (!req.user) {
+      throw new AppError("Usuario no autenticado", 401, "AUTHENTICATION_REQUIRED");
+    }
+    await deleteExistingActivity(id, {
+      requestId: req.requestId,
+      id_usuario: req.user.id_usuario,
+      rol_actor: req.user.rol,
+    });
 
     res.status(204).send();
   } catch (error) {

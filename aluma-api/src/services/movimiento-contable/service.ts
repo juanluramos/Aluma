@@ -12,6 +12,15 @@ import type { CreateAccountingMovementDto } from "../../dtos/movimiento-contable
 import type { UpdateAccountingMovementDto } from "../../dtos/movimiento-contable/update-accounting-movement.dto.js";
 
 import { AppError } from "../../errors/app-error.js";
+import type { Prisma } from "../../generated/prisma/client.js";
+import { prisma } from "../../config/prisma.js";
+import { createAudit } from "../auditoria/service.js";
+
+export interface AccountingMovementCreationAuditContext {
+  requestId: string;
+  id_usuario: number;
+  rol_actor: string;
+}
 
 /**
  * Obtiene todos los movimientos contables.
@@ -26,8 +35,8 @@ export async function getAccountingMovements() {
  * @param id - ID del movimiento.
  * @throws AppError Si el movimiento no existe.
  */
-export async function getAccountingMovement(id: number) {
-  const movement = await getAccountingMovementById(id);
+export async function getAccountingMovement(id: number, client: Prisma.TransactionClient = prisma) {
+  const movement = await getAccountingMovementById(id, client);
 
   if (!movement) {
     throw new AppError(
@@ -49,10 +58,11 @@ export async function getAccountingMovement(id: number) {
  */
 async function validateMovementAmount(
   movementTypeId: number,
-  amount: number
+  amount: number,
+  client: Prisma.TransactionClient = prisma
 ) {
   const movementType = await getMovementTypeById(
-    movementTypeId
+    movementTypeId, client
   );
 
   if (!movementType) {
@@ -89,7 +99,8 @@ async function validateMovementAmount(
  * Crea un nuevo movimiento contable.
  */
 export async function createNewAccountingMovement(
-  data: CreateAccountingMovementDto
+  data: CreateAccountingMovementDto,
+  context: AccountingMovementCreationAuditContext
 ) {
   assertIndependentMovement(data.id_inscripcion);
   await validateMovementAmount(
@@ -97,7 +108,21 @@ export async function createNewAccountingMovement(
     data.importe
   );
 
-  return createAccountingMovement(data);
+  return prisma.$transaction(async (tx) => {
+    const movement = await createAccountingMovement(data, tx);
+    await createAudit({
+      requestId: context.requestId,
+      id_usuario: context.id_usuario,
+      rol_actor: context.rol_actor,
+      accion: 'MOVIMIENTO_CREADO',
+      recurso: 'MOVIMIENTO_CONTABLE',
+      id_recurso: movement.id_movimiento,
+      resultado: 'REALIZADA',
+      codigo_error: null,
+      detalles: null,
+    }, tx);
+    return movement;
+  });
 }
 
 /**
@@ -105,44 +130,81 @@ export async function createNewAccountingMovement(
  */
 export async function updateExistingAccountingMovement(
   id: number,
-  data: UpdateAccountingMovementDto
+  data: UpdateAccountingMovementDto,
+  context: AccountingMovementCreationAuditContext
 ) {
-  const currentMovement =
-    await getAccountingMovement(id);
-  assertIndependentMovement(currentMovement.id_inscripcion);
-  assertIndependentMovement(data.id_inscripcion);
+  return prisma.$transaction(async (tx) => {
+    const currentMovement = await getAccountingMovement(id, tx);
+    assertIndependentMovement(currentMovement.id_inscripcion);
+    assertIndependentMovement(data.id_inscripcion);
 
-  /**
-   * Calculamos el tipo e importe efectivos,
-   * igual que hicimos con InscripcionActividad.
-   */
-  const effectiveMovementTypeId =
-    data.id_tipo_movimiento ??
-    currentMovement.id_tipo_movimiento;
+    const effectiveMovementTypeId = data.id_tipo_movimiento ?? currentMovement.id_tipo_movimiento;
+    const effectiveAmount = data.importe !== undefined ? data.importe : Number(currentMovement.importe);
+    await validateMovementAmount(effectiveMovementTypeId, effectiveAmount, tx);
 
-  const effectiveAmount =
-    data.importe !== undefined
-      ? data.importe
-      : Number(currentMovement.importe);
-
-  await validateMovementAmount(
-    effectiveMovementTypeId,
-    effectiveAmount
-  );
-
-  return updateAccountingMovement(id, data);
+    const updated = await updateAccountingMovement(id, data, tx);
+    const values = (row: typeof updated) => ({
+      id_tipo_movimiento: row.id_tipo_movimiento,
+      concepto: row.concepto,
+      importe: row.importe.toFixed(2),
+      fecha: row.fecha.toISOString().slice(0, 10),
+      id_inscripcion: row.id_inscripcion,
+      comentario: row.comentario,
+    });
+    const before = values(currentMovement);
+    const after = values(updated);
+    const cambios: Record<string, { anterior: string | number | null; nuevo: string | number | null }> = {};
+    for (const field of Object.keys(before) as (keyof typeof before)[]) {
+      if (before[field] !== after[field]) {
+        // Comparar texto real, pero no copiar texto libre potencialmente sensible.
+        const privateText = field === 'concepto' || field === 'comentario';
+        cambios[field] = {
+          anterior: privateText && before[field] !== null ? '[REDACTADO]' : before[field],
+          nuevo: privateText && after[field] !== null ? '[REDACTADO]' : after[field],
+        };
+      }
+    }
+    if (Object.keys(cambios).length > 0) {
+      await createAudit({
+        requestId: context.requestId,
+        id_usuario: context.id_usuario,
+        rol_actor: context.rol_actor,
+        accion: 'MOVIMIENTO_MODIFICADO',
+        recurso: 'MOVIMIENTO_CONTABLE',
+        id_recurso: updated.id_movimiento,
+        resultado: 'REALIZADA',
+        codigo_error: null,
+        detalles: { cambios },
+      }, tx);
+    }
+    return updated;
+  });
 }
 
 /**
  * Elimina un movimiento contable existente.
  */
 export async function deleteExistingAccountingMovement(
-  id: number
+  id: number,
+  context: AccountingMovementCreationAuditContext
 ) {
-  const movement = await getAccountingMovement(id);
-  assertIndependentMovement(movement.id_inscripcion);
-
-  return deleteAccountingMovement(id);
+  return prisma.$transaction(async (tx) => {
+    const movement = await getAccountingMovement(id, tx);
+    assertIndependentMovement(movement.id_inscripcion);
+    const deleted = await deleteAccountingMovement(id, tx);
+    await createAudit({
+      requestId: context.requestId,
+      id_usuario: context.id_usuario,
+      rol_actor: context.rol_actor,
+      accion: 'MOVIMIENTO_ELIMINADO',
+      recurso: 'MOVIMIENTO_CONTABLE',
+      id_recurso: deleted.id_movimiento,
+      resultado: 'REALIZADA',
+      codigo_error: null,
+      detalles: null,
+    }, tx);
+    return deleted;
+  });
 }
 
 function assertIndependentMovement(enrollmentId: number | null | undefined) {

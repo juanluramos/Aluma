@@ -13,8 +13,8 @@ export async function getAllActivities() {
  * @param id - ID de la actividad.
  * @returns La actividad encontrada o null.
  */
-export async function getActivityById(id) {
-    return prisma.actividad.findUnique({
+export async function getActivityById(id, client = prisma) {
+    return client.actividad.findUnique({
         where: {
             id_actividad: id,
         },
@@ -26,8 +26,8 @@ export async function getActivityById(id) {
  * @param data - Datos validados de la actividad.
  * @returns La actividad creada.
  */
-export async function createActivity(data) {
-    return prisma.actividad.create({
+export async function createActivity(data, client = prisma) {
+    return client.actividad.create({
         data: {
             titulo: data.titulo,
             id_estado_actividad: data.id_estado_actividad,
@@ -56,8 +56,8 @@ export async function createActivity(data) {
  * @param data - Datos a actualizar.
  * @returns La actividad actualizada.
  */
-export async function updateActivity(id, data) {
-    return prisma.actividad.update({
+export async function updateActivity(id, data, client = prisma) {
+    return client.actividad.update({
         where: {
             id_actividad: id,
         },
@@ -89,8 +89,8 @@ export async function updateActivity(id, data) {
  * @param id - ID de la actividad.
  * @returns La actividad eliminada.
  */
-export async function deleteActivity(id) {
-    return prisma.actividad.delete({
+export async function deleteActivity(id, client = prisma) {
+    return client.actividad.delete({
         where: {
             id_actividad: id,
         },

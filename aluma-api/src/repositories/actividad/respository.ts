@@ -1,4 +1,5 @@
 import { prisma } from "../../config/prisma.js";
+import type { Prisma } from "../../generated/prisma/client.js";
 
 import type { CreateActivityDto } from "../../dtos/actividad/create-activity.dto.js";
 import type { UpdateActivityDto } from "../../dtos/actividad/update-activity.dto.js";
@@ -18,8 +19,8 @@ export async function getAllActivities() {
  * @param id - ID de la actividad.
  * @returns La actividad encontrada o null.
  */
-export async function getActivityById(id: number) {
-  return prisma.actividad.findUnique({
+export async function getActivityById(id: number, client: Prisma.TransactionClient = prisma) {
+  return client.actividad.findUnique({
     where: {
       id_actividad: id,
     },
@@ -33,9 +34,10 @@ export async function getActivityById(id: number) {
  * @returns La actividad creada.
  */
 export async function createActivity(
-  data: CreateActivityDto
+  data: CreateActivityDto,
+  client: Prisma.TransactionClient = prisma
 ) {
-  return prisma.actividad.create({
+  return client.actividad.create({
     data: {
       titulo: data.titulo,
       id_estado_actividad: data.id_estado_actividad,
@@ -71,9 +73,10 @@ export async function createActivity(
  */
 export async function updateActivity(
   id: number,
-  data: UpdateActivityDto
+  data: UpdateActivityDto,
+  client: Prisma.TransactionClient = prisma
 ) {
-  return prisma.actividad.update({
+  return client.actividad.update({
     where: {
       id_actividad: id,
     },
@@ -112,8 +115,8 @@ export async function updateActivity(
  * @param id - ID de la actividad.
  * @returns La actividad eliminada.
  */
-export async function deleteActivity(id: number) {
-  return prisma.actividad.delete({
+export async function deleteActivity(id: number, client: Prisma.TransactionClient = prisma) {
+  return client.actividad.delete({
     where: {
       id_actividad: id,
     },

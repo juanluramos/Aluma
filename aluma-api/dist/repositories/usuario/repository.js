@@ -11,8 +11,8 @@ export async function getAllUsers() {
  * Busca un usuario por su ID.
  * @returns El usuario encontrado o null si no existe.
  */
-export async function getUserById(id) {
-    return prisma.usuario.findUnique({
+export async function getUserById(id, client = prisma) {
+    return client.usuario.findUnique({
         where: {
             id_usuario: id
         },
@@ -26,8 +26,8 @@ export async function getUserById(id) {
  * @param data Datos del usuario.
  * @returns El usuario creado.
  */
-export async function createUser(data) {
-    return prisma.usuario.create({
+export async function createUser(data, client = prisma) {
+    return client.usuario.create({
         data: {
             id_tipo_documento: data.id_tipo_documento,
             numeroDocumento: data.numeroDocumento,
@@ -72,8 +72,8 @@ export async function createUser(data) {
  * @param data Datos a actualizar.
  * @returns Usuario actualizado.
  */
-export async function updateUser(id, data) {
-    return prisma.usuario.update({
+export async function updateUser(id, data, client = prisma) {
+    return client.usuario.update({
         where: {
             id_usuario: id,
         },
@@ -125,8 +125,8 @@ export async function updateUser(id, data) {
  * @param id ID del usuario a eliminar.
  * @returns El usuario eliminado.
  */
-export async function deleteUser(id) {
-    return prisma.usuario.delete({
+export async function deleteUser(id, client = prisma) {
+    return client.usuario.delete({
         where: {
             id_usuario: id
         }

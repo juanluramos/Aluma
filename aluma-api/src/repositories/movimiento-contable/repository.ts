@@ -1,6 +1,7 @@
 import { prisma } from "../../config/prisma.js";
 import type { CreateAccountingMovementDto } from "../../dtos/movimiento-contable/create-accounting-movement.dto.js";
 import type { UpdateAccountingMovementDto } from "../../dtos/movimiento-contable/update-accounting-movement.dto.js";
+import type { Prisma } from "../../generated/prisma/client.js";
 
 /**
  * Obtiene todos los movimientos contables.
@@ -14,8 +15,8 @@ export async function getAllAccountingMovements() {
  *
  * @param id - ID del movimiento.
  */
-export async function getAccountingMovementById(id: number) {
-  return prisma.movimientoContable.findUnique({
+export async function getAccountingMovementById(id: number, client: Prisma.TransactionClient = prisma) {
+  return client.movimientoContable.findUnique({
     where: {
       id_movimiento: id,
     },
@@ -30,8 +31,8 @@ export async function getAccountingMovementById(id: number) {
  *
  * @param id - ID del tipo de movimiento.
  */
-export async function getMovementTypeById(id: number) {
-  return prisma.tipoMovimiento.findUnique({
+export async function getMovementTypeById(id: number, client: Prisma.TransactionClient = prisma) {
+  return client.tipoMovimiento.findUnique({
     where: {
       id_tipo_movimiento: id,
     },
@@ -44,9 +45,10 @@ export async function getMovementTypeById(id: number) {
  * @param data - Datos validados del movimiento.
  */
 export async function createAccountingMovement(
-  data: CreateAccountingMovementDto
+  data: CreateAccountingMovementDto,
+  client: Prisma.TransactionClient = prisma
 ) {
-  return prisma.movimientoContable.create({
+  return client.movimientoContable.create({
     data: {
       id_tipo_movimiento: data.id_tipo_movimiento,
       concepto: data.concepto,
@@ -72,9 +74,10 @@ export async function createAccountingMovement(
  */
 export async function updateAccountingMovement(
   id: number,
-  data: UpdateAccountingMovementDto
+  data: UpdateAccountingMovementDto,
+  client: Prisma.TransactionClient = prisma
 ) {
-  return prisma.movimientoContable.update({
+  return client.movimientoContable.update({
     where: {
       id_movimiento: id,
       id_inscripcion: null,
@@ -113,8 +116,8 @@ export async function updateAccountingMovement(
  *
  * @param id - ID del movimiento.
  */
-export async function deleteAccountingMovement(id: number) {
-  return prisma.movimientoContable.delete({
+export async function deleteAccountingMovement(id: number, client: Prisma.TransactionClient = prisma) {
+  return client.movimientoContable.delete({
     where: {
       id_movimiento: id,
       id_inscripcion: null,

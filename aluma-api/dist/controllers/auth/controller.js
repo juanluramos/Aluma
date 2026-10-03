@@ -14,7 +14,7 @@ export async function loginController(req, res) {
         return;
     }
     const { email, password } = result.data;
-    const resultLogin = await loginUser(email, password);
+    const resultLogin = await loginUser(email, password, req.requestId);
     res.status(200).json(resultLogin);
 }
 //# sourceMappingURL=controller.js.map

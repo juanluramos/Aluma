@@ -24,7 +24,7 @@ export async function loginController(
 
   const { email, password } = result.data;
 
-  const resultLogin = await loginUser(email, password);
+  const resultLogin = await loginUser(email, password, req.requestId);
 
   res.status(200).json(resultLogin);
 }

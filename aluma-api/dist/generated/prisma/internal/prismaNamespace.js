@@ -80,7 +80,8 @@ export const ModelName = {
     TipoDocumentoIdentificacion: 'TipoDocumentoIdentificacion',
     TipoMovimiento: 'TipoMovimiento',
     Usuario: 'Usuario',
-    EstadoInscripcion: 'EstadoInscripcion'
+    EstadoInscripcion: 'EstadoInscripcion',
+    Auditoria: 'Auditoria'
 };
 /**
  * Enums
@@ -196,9 +197,26 @@ export const EstadoInscripcionScalarFieldEnum = {
     createAt: 'createAt',
     updateAt: 'updateAt'
 };
+export const AuditoriaScalarFieldEnum = {
+    id_auditoria: 'id_auditoria',
+    fecha_evento: 'fecha_evento',
+    requestId: 'requestId',
+    id_usuario: 'id_usuario',
+    rol_actor: 'rol_actor',
+    accion: 'accion',
+    recurso: 'recurso',
+    id_recurso: 'id_recurso',
+    resultado: 'resultado',
+    codigo_error: 'codigo_error',
+    detalles: 'detalles'
+};
 export const SortOrder = {
     asc: 'asc',
     desc: 'desc'
+};
+export const NullableJsonNullValueInput = {
+    DbNull: DbNull,
+    JsonNull: JsonNull
 };
 export const NullsOrder = {
     first: 'first',
@@ -255,6 +273,23 @@ export const UsuarioOrderByRelevanceFieldEnum = {
 };
 export const EstadoInscripcionOrderByRelevanceFieldEnum = {
     nombre: 'nombre'
+};
+export const JsonNullValueFilter = {
+    DbNull: DbNull,
+    JsonNull: JsonNull,
+    AnyNull: AnyNull
+};
+export const QueryMode = {
+    default: 'default',
+    insensitive: 'insensitive'
+};
+export const AuditoriaOrderByRelevanceFieldEnum = {
+    requestId: 'requestId',
+    rol_actor: 'rol_actor',
+    accion: 'accion',
+    recurso: 'recurso',
+    resultado: 'resultado',
+    codigo_error: 'codigo_error'
 };
 export const defineExtension = runtime.Extensions.defineExtension;
 //# sourceMappingURL=prismaNamespace.js.map

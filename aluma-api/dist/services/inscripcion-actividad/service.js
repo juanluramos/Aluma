@@ -1,5 +1,6 @@
-import { getAllEnrollments, getEnrollmentById, getEnrollmentWithMovements, createEnrollment, createEnrollmentMovement, updateEnrollment, updateEnrollmentWithMovement, deleteEnrollment, getPaymentStatusById, getActiveEnrollmentByUserAndActivity, getEnrollmentStatusByName, getEnrollmentReferences, withEnrollmentTransaction, } from '../../repositories/inscripcion-actividad/repository.js';
+import { getAllEnrollments, getEnrollmentById, getEnrollmentWithMovements, createEnrollment, createEnrollmentMovement, updateEnrollment, deleteEnrollment, getPaymentStatusById, getActiveEnrollmentByUserAndActivity, getEnrollmentStatusByName, getEnrollmentReferences, withEnrollmentTransaction, } from '../../repositories/inscripcion-actividad/repository.js';
 import { AppError } from '../../errors/app-error.js';
+import { createAudit } from '../auditoria/service.js';
 export async function getEnrollments(userId) {
     return getAllEnrollments(userId);
 }
@@ -51,7 +52,7 @@ function chargeMovement(status, values) {
         concepto: 'Cobro inscripción', importe: values.precioAplicado, fecha: values.fechaPago,
     };
 }
-export async function createNewEnrollment(data) {
+export async function createNewEnrollment(data, context) {
     return withEnrollmentTransaction(async (tx) => {
         const status = await paymentStatus(data.id_estado_pago, tx);
         if (status.nombre_estado === 'Devolución') {
@@ -70,8 +71,24 @@ export async function createNewEnrollment(data) {
         validatePaymentData(status, values);
         const movement = status.nombre_estado === 'Pagado' ? chargeMovement(status, values) : null;
         const enrollment = await createEnrollment(data, active.id_estado_inscripcion, tx);
-        if (movement)
-            await createEnrollmentMovement(enrollment.id_inscripcion, movement, tx);
+        const charge = movement ? await createEnrollmentMovement(enrollment.id_inscripcion, movement, tx) : null;
+        const auditContext = {
+            requestId: context.requestId,
+            id_usuario: context.id_usuario,
+            rol_actor: context.rol_actor,
+            recurso: 'INSCRIPCION_ACTIVIDAD',
+            id_recurso: enrollment.id_inscripcion,
+            resultado: 'REALIZADA',
+            codigo_error: null,
+        };
+        await createAudit({ ...auditContext, accion: 'INSCRIPCION_CREADA', detalles: null }, tx);
+        if (charge) {
+            await createAudit({
+                ...auditContext,
+                accion: 'INSCRIPCION_COBRADA',
+                detalles: { importe: charge.importe.toFixed(2), id_movimiento: charge.id_movimiento },
+            }, tx);
+        }
         return enrollment;
     });
 }
@@ -80,11 +97,51 @@ function comparable(value) {
         return value.toISOString().slice(0, 10);
     return value;
 }
-export async function updateExistingEnrollment(id, data) {
+export async function updateExistingEnrollment(id, data, context) {
     return withEnrollmentTransaction(async (tx) => {
         const current = await getEnrollmentWithMovements(id, tx);
         if (!current)
             throw new AppError('Inscripción no encontrada', 404, 'ENROLLMENT_NOT_FOUND');
+        // Solo los caminos administrativos llaman a esta escritura auditada.
+        async function updateAdministrativeEnrollment() {
+            const updated = await updateEnrollment(id, data, tx);
+            const values = (row) => ({
+                id_usuario: row.id_usuario,
+                id_actividad: row.id_actividad,
+                precioAplicado: row.precioAplicado?.toFixed(2) ?? null,
+                id_estado_pago: row.id_estado_pago,
+                id_estado_inscripcion: row.id_estado_inscripcion,
+                id_metodo_pago: row.id_metodo_pago,
+                apuntadoFecha: row.apuntadoFecha.toISOString().slice(0, 10),
+                fechaPago: row.fechaPago?.toISOString().slice(0, 10) ?? null,
+                comentario: row.comentario,
+            });
+            const before = values(current);
+            const after = values(updated);
+            const cambios = {};
+            for (const field of Object.keys(before)) {
+                if (before[field] !== after[field]) {
+                    // El texto libre puede contener datos sensibles: registrar solo que cambió.
+                    cambios[field] = field === 'comentario'
+                        ? { modificado: true }
+                        : { anterior: before[field], nuevo: after[field] };
+                }
+            }
+            if (Object.keys(cambios).length > 0) {
+                await createAudit({
+                    requestId: context.requestId,
+                    id_usuario: context.id_usuario,
+                    rol_actor: context.rol_actor,
+                    accion: 'INSCRIPCION_MODIFICADA',
+                    recurso: 'INSCRIPCION_ACTIVIDAD',
+                    id_recurso: updated.id_inscripcion,
+                    resultado: 'REALIZADA',
+                    codigo_error: null,
+                    detalles: { cambios },
+                }, tx);
+            }
+            return updated;
+        }
         const currentStatus = await paymentStatus(current.id_estado_pago, tx);
         const status = await paymentStatus(data.id_estado_pago ?? current.id_estado_pago, tx);
         const values = {
@@ -131,12 +188,25 @@ export async function updateExistingEnrollment(id, data) {
                 if (data.id_estado_inscripcion !== undefined && data.id_estado_inscripcion !== closed.id_estado_inscripcion) {
                     throw new AppError('La devolución debe cerrar la inscripción', 409, 'REFUND_REQUIRES_CLOSED_ENROLLMENT');
                 }
-                return updateEnrollmentWithMovement(id, { ...data, id_estado_inscripcion: closed.id_estado_inscripcion }, {
+                const updated = await updateEnrollment(id, { ...data, id_estado_inscripcion: closed.id_estado_inscripcion }, tx);
+                const movement = await createEnrollmentMovement(id, {
                     id_tipo_movimiento: status.TipoMovimiento.id_tipo_movimiento,
                     concepto: 'Devolución inscripción', importe: -Number(charge.importe), fecha: new Date(),
                 }, tx);
+                await createAudit({
+                    requestId: context.requestId,
+                    id_usuario: context.id_usuario,
+                    rol_actor: context.rol_actor,
+                    accion: 'INSCRIPCION_DEVUELTA',
+                    recurso: 'INSCRIPCION_ACTIVIDAD',
+                    id_recurso: id,
+                    resultado: 'REALIZADA',
+                    codigo_error: null,
+                    detalles: { importe: movement.importe.toFixed(2), id_movimiento: movement.id_movimiento },
+                }, tx);
+                return updated;
             }
-            return updateEnrollment(id, data, tx);
+            return updateAdministrativeEnrollment();
         }
         if (status.nombre_estado === 'Devolución') {
             throw new AppError('La devolución requiere un cobro previo válido', 409, 'VALID_CHARGE_REQUIRED');
@@ -150,12 +220,26 @@ export async function updateExistingEnrollment(id, data) {
             if (enrollmentStatus.nombre !== 'Activa') {
                 throw new AppError('Solo se puede cobrar una inscripción activa', 409, 'ACTIVE_ENROLLMENT_REQUIRED');
             }
-            return updateEnrollmentWithMovement(id, data, chargeMovement(status, values), tx);
+            const movement = chargeMovement(status, values);
+            const updated = await updateEnrollment(id, data, tx);
+            const charge = await createEnrollmentMovement(id, movement, tx);
+            await createAudit({
+                requestId: context.requestId,
+                id_usuario: context.id_usuario,
+                rol_actor: context.rol_actor,
+                accion: 'INSCRIPCION_COBRADA',
+                recurso: 'INSCRIPCION_ACTIVIDAD',
+                id_recurso: id,
+                resultado: 'REALIZADA',
+                codigo_error: null,
+                detalles: { importe: charge.importe.toFixed(2), id_movimiento: charge.id_movimiento },
+            }, tx);
+            return updated;
         }
-        return updateEnrollment(id, data, tx);
+        return updateAdministrativeEnrollment();
     });
 }
-export async function deleteExistingEnrollment(id) {
+export async function deleteExistingEnrollment(id, context) {
     return withEnrollmentTransaction(async (tx) => {
         const enrollment = await getEnrollmentWithMovements(id, tx);
         if (!enrollment)
@@ -163,7 +247,19 @@ export async function deleteExistingEnrollment(id) {
         if (enrollment.MovimientoContable.length > 0) {
             throw new AppError('No se puede borrar una inscripción con movimientos contables', 409, 'ENROLLMENT_HAS_MOVEMENTS');
         }
-        return deleteEnrollment(id, tx);
+        const deleted = await deleteEnrollment(id, tx);
+        await createAudit({
+            requestId: context.requestId,
+            id_usuario: context.id_usuario,
+            rol_actor: context.rol_actor,
+            accion: 'INSCRIPCION_ELIMINADA',
+            recurso: 'INSCRIPCION_ACTIVIDAD',
+            id_recurso: deleted.id_inscripcion,
+            resultado: 'REALIZADA',
+            codigo_error: null,
+            detalles: null,
+        }, tx);
+        return deleted;
     });
 }
 //# sourceMappingURL=service.js.map

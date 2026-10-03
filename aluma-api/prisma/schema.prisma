@@ -169,3 +169,23 @@ model EstadoInscripcion {
   updateAt              DateTime               @default(now()) @db.DateTime(0)
   InscripcionActividad  InscripcionActividad[]
 }
+
+model Auditoria {
+  id_auditoria BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  fecha_evento DateTime @default(now()) @db.DateTime(3)
+  requestId    String   @db.Char(36)
+  id_usuario   Int?
+  rol_actor    String?  @db.VarChar(30)
+  accion       String   @db.VarChar(64)
+  recurso      String   @db.VarChar(32)
+  id_recurso   Int?
+  resultado    String   @db.VarChar(16)
+  codigo_error String?  @db.VarChar(64)
+  detalles     Json?
+
+  @@index([fecha_evento, id_auditoria], map: "idx_auditoria_fecha")
+  @@index([id_usuario, fecha_evento, id_auditoria], map: "idx_auditoria_usuario_fecha")
+  @@index([recurso, id_recurso, fecha_evento, id_auditoria], map: "idx_auditoria_recurso_fecha")
+  @@index([accion, fecha_evento, id_auditoria], map: "idx_auditoria_accion_fecha")
+  @@index([requestId, id_auditoria], map: "idx_auditoria_request")
+}

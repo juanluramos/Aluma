@@ -11,6 +11,7 @@ import {
   updateExistingUser,
   deleteExistingUser,
 } from "../../services/usuario/service.js";
+import { AppError } from "../../errors/app-error.js";
 
 
 /**
@@ -94,8 +95,16 @@ export async function createUserController(
   next: NextFunction
 ): Promise<void> {
   try {
+    if (!req.user) {
+      throw new AppError("Usuario no autenticado", 401, "AUTHENTICATION_REQUIRED");
+    }
+
     const user =
-      await createNewUser(req.body);
+      await createNewUser(req.body, {
+        requestId: req.requestId,
+        id_usuario: req.user.id_usuario,
+        rol_actor: req.user.rol,
+      });
 
     res.status(201).json(user);
   } catch (error) {
@@ -127,10 +136,19 @@ export async function updateUserController(
       return;
     }
 
+    if (!req.user) {
+      throw new AppError("Usuario no autenticado", 401, "AUTHENTICATION_REQUIRED");
+    }
+
     const user =
       await updateExistingUser(
         id,
-        req.body
+        req.body,
+        {
+          requestId: req.requestId,
+          id_usuario: req.user.id_usuario,
+          rol_actor: req.user.rol,
+        }
       );
 
     res.status(200).json(user);
@@ -172,7 +190,14 @@ export async function deleteUserController(
      * El Service comprobará que el usuario exista
      * antes de eliminarlo.
      */
-    await deleteExistingUser(id);
+    if (!req.user) {
+      throw new AppError("Usuario no autenticado", 401, "AUTHENTICATION_REQUIRED");
+    }
+    await deleteExistingUser(id, {
+      requestId: req.requestId,
+      id_usuario: req.user.id_usuario,
+      rol_actor: req.user.rol,
+    });
 
     res.status(204).send();
   } catch (error) {

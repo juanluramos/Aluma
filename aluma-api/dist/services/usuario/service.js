@@ -1,5 +1,7 @@
 import { getAllUsers, getUserById, createUser, updateUser, deleteUser } from "../../repositories/usuario/repository.js";
 import { AppError } from "../../errors/app-error.js";
+import { prisma } from "../../config/prisma.js";
+import { createAudit } from "../auditoria/service.js";
 /**
  * Obtiene todos los usuarios.
  *
@@ -33,8 +35,22 @@ export async function getUser(id) {
  * @param data - Datos del nuevo usuario.
  * @returns usuario creado.
  */
-export async function createNewUser(data) {
-    return createUser(data);
+export async function createNewUser(data, context) {
+    return prisma.$transaction(async (tx) => {
+        const user = await createUser(data, tx);
+        await createAudit({
+            requestId: context.requestId,
+            id_usuario: context.id_usuario,
+            rol_actor: context.rol_actor,
+            accion: "USUARIO_CREADO",
+            recurso: "USUARIO",
+            id_recurso: user.id_usuario,
+            resultado: "REALIZADA",
+            codigo_error: null,
+            detalles: null,
+        }, tx);
+        return user;
+    });
 }
 /**
  * Actualiza un usuario existente.
@@ -50,27 +66,75 @@ export async function createNewUser(data) {
  * Actualiza un usuario existente.
  *
  * Comprueba primero que el usuario exista.
- * Si no existe, getUser() lanzará un AppError.
+ * Si no existe, se lanza un AppError antes de actualizar.
  *
  * @param id - El ID del usuario a actualizar.
  * @param data - Datos del usuario que se van a actualizar.
  * @returns El usuario actualizado.
  */
-export async function updateExistingUser(id, data) {
-    await getUser(id);
-    return updateUser(id, data);
+export async function updateExistingUser(id, data, context) {
+    return prisma.$transaction(async (tx) => {
+        const anterior = await getUserById(id, tx);
+        if (!anterior) {
+            throw new AppError("Usuario no encontrado", 404, "USER_NOT_FOUND");
+        }
+        const actualizado = await updateUser(id, data, tx);
+        // Lista explicita: nunca incluir credenciales ni copiar el objeto completo.
+        const campos = [
+            "codUsuario", "id_tipo_documento", "numeroDocumento", "nombre",
+            "apellido1", "apellido2", "email", "telefono", "id_rol", "socio",
+            "id_estado_usuario", "matriculaPagada", "comentario",
+        ];
+        const cambios = {};
+        for (const campo of campos) {
+            if (anterior[campo] !== actualizado[campo]) {
+                cambios[campo] = { anterior: anterior[campo], nuevo: actualizado[campo] };
+            }
+        }
+        if (Object.keys(cambios).length > 0) {
+            await createAudit({
+                requestId: context.requestId,
+                id_usuario: context.id_usuario,
+                rol_actor: context.rol_actor,
+                accion: "USUARIO_MODIFICADO",
+                recurso: "USUARIO",
+                id_recurso: actualizado.id_usuario,
+                resultado: "REALIZADA",
+                codigo_error: null,
+                detalles: { cambios },
+            }, tx);
+        }
+        return actualizado;
+    }, { isolationLevel: "Serializable" });
 }
 /**
  * Elimina un usuario existente.
  *
  * Comprueba primero que el usuario exista.
- * Si no existe, getUser() lanzará un AppError.
+ * Si no existe, se lanza un AppError antes de eliminar.
  *
  * @param id - El ID del usuario a eliminar.
  * @returns El usuario eliminado.
  */
-export async function deleteExistingUser(id) {
-    await getUser(id);
-    return deleteUser(id);
+export async function deleteExistingUser(id, context) {
+    return prisma.$transaction(async (tx) => {
+        const user = await getUserById(id, tx);
+        if (!user) {
+            throw new AppError("Usuario no encontrado", 404, "USER_NOT_FOUND");
+        }
+        const deleted = await deleteUser(user.id_usuario, tx);
+        await createAudit({
+            requestId: context.requestId,
+            id_usuario: context.id_usuario,
+            rol_actor: context.rol_actor,
+            accion: "USUARIO_ELIMINADO",
+            recurso: "USUARIO",
+            id_recurso: user.id_usuario,
+            resultado: "REALIZADA",
+            codigo_error: null,
+            detalles: null,
+        }, tx);
+        return deleted;
+    });
 }
 //# sourceMappingURL=service.js.map
