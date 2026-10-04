@@ -184,3 +184,21 @@ export async function deleteUser(id: number, client: Prisma.TransactionClient = 
         }
     });
 }
+
+
+/**
+ * Busca un usuario por su email.
+ *
+ * @param email - Email del usuario.
+ * @returns El usuario encontrado o null.
+ */
+export async function findUserByEmail(
+  email: string,
+  client: Prisma.TransactionClient = prisma
+) {
+  return client.usuario.findUnique({
+    where: {
+      email,
+    },
+  });
+}

@@ -132,4 +132,17 @@ export async function deleteUser(id, client = prisma) {
         }
     });
 }
+/**
+ * Busca un usuario por su email.
+ *
+ * @param email - Email del usuario.
+ * @returns El usuario encontrado o null.
+ */
+export async function findUserByEmail(email, client = prisma) {
+    return client.usuario.findUnique({
+        where: {
+            email,
+        },
+    });
+}
 //# sourceMappingURL=repository.js.map
