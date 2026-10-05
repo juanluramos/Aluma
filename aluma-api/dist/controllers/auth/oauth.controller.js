@@ -48,14 +48,14 @@ export async function googleCallbackController(req, res, next) {
             audience: clientId,
         });
         const payload = ticket.getPayload();
-        if (!payload) {
+        if (!payload || !payload.sub || !payload.email || payload.email_verified !== true) {
             res.status(401).json({
                 message: "No se pudo obtener la identidad de Google",
                 code: "GOOGLE_IDENTITY_NOT_FOUND",
             });
             return;
         }
-        const result = await authenticateWithOAuth("Google", payload.sub, payload.email ?? "");
+        const result = await authenticateWithOAuth("Google", payload.sub, payload.email);
         res.status(200).json(result);
     }
     catch (error) {

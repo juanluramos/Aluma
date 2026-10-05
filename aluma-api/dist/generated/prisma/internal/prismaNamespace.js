@@ -81,7 +81,9 @@ export const ModelName = {
     TipoMovimiento: 'TipoMovimiento',
     Usuario: 'Usuario',
     EstadoInscripcion: 'EstadoInscripcion',
-    Auditoria: 'Auditoria'
+    Auditoria: 'Auditoria',
+    EstadoSolicitud: 'EstadoSolicitud',
+    SolicitudAlta: 'SolicitudAlta'
 };
 /**
  * Enums
@@ -210,6 +212,29 @@ export const AuditoriaScalarFieldEnum = {
     codigo_error: 'codigo_error',
     detalles: 'detalles'
 };
+export const EstadoSolicitudScalarFieldEnum = {
+    id_estado_solicitud: 'id_estado_solicitud',
+    nombre: 'nombre'
+};
+export const SolicitudAltaScalarFieldEnum = {
+    id_solicitud: 'id_solicitud',
+    proveedor: 'proveedor',
+    external_id: 'external_id',
+    email: 'email',
+    id_tipo_documento: 'id_tipo_documento',
+    numeroDocumento: 'numeroDocumento',
+    nombre: 'nombre',
+    apellido1: 'apellido1',
+    apellido2: 'apellido2',
+    telefono: 'telefono',
+    socio: 'socio',
+    id_estado_solicitud: 'id_estado_solicitud',
+    fechaSolicitud: 'fechaSolicitud',
+    fechaResolucion: 'fechaResolucion',
+    id_administrador_resolucion: 'id_administrador_resolucion',
+    motivoRechazo: 'motivoRechazo',
+    id_usuario_creado: 'id_usuario_creado'
+};
 export const SortOrder = {
     asc: 'asc',
     desc: 'desc'
@@ -290,6 +315,20 @@ export const AuditoriaOrderByRelevanceFieldEnum = {
     recurso: 'recurso',
     resultado: 'resultado',
     codigo_error: 'codigo_error'
+};
+export const EstadoSolicitudOrderByRelevanceFieldEnum = {
+    nombre: 'nombre'
+};
+export const SolicitudAltaOrderByRelevanceFieldEnum = {
+    proveedor: 'proveedor',
+    external_id: 'external_id',
+    email: 'email',
+    numeroDocumento: 'numeroDocumento',
+    nombre: 'nombre',
+    apellido1: 'apellido1',
+    apellido2: 'apellido2',
+    telefono: 'telefono',
+    motivoRechazo: 'motivoRechazo'
 };
 export const defineExtension = runtime.Extensions.defineExtension;
 //# sourceMappingURL=prismaNamespace.js.map

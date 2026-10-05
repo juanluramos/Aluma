@@ -1,3 +1,5 @@
+import { findSolicitud } from "../../repositories/solicitud-alta/repository.js";
+import { createRegistrationToken } from "../../utils/registration-token.js";
 import { findOAuthAccount, createOAuthAccount } from '../../repositories/auth/repository.js';
 import { findUserByEmail } from '../../repositories/usuario/repository.js';
 import { AppError } from '../../errors/app-error.js';
@@ -82,8 +84,16 @@ export async function authenticateWithOAuth(proveedor, externalId, email) {
      * No existe ni la cuenta OAuth ni el usuario.
      * El registro se implementará posteriormente.
      */
+    if (proveedor !== 'Google')
+        throw new AppError('Proveedor no soportado para alta', 400, 'UNSUPPORTED_REGISTRATION_PROVIDER');
+    const identity = { proveedor: 'Google', external_id: externalId, email };
+    const solicitud = await findSolicitud(identity);
+    if (solicitud?.EstadoSolicitud.nombre === 'Aceptada') {
+        throw new AppError('Solicitud aceptada sin cuenta asociada', 409, 'APPLICATION_ACCOUNT_MISSING');
+    }
     return {
-        type: "registration_required",
+        type: solicitud ? (solicitud.EstadoSolicitud.nombre === 'Pendiente' ? 'registration_pending' : 'registration_rejected') : 'registration_required',
+        registrationToken: createRegistrationToken(identity),
     };
 }
 //# sourceMappingURL=oauth.service.js.map

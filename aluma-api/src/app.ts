@@ -1,3 +1,4 @@
+import solicitudAltaRoutes from "./routes/solicitud-alta/routes.js";
 import express from "express";
 import usuarioRoutes from "./routes/usuario/routes.js";
 import { errorMiddleware } from "./middlewares/error.middleware.js";
@@ -47,6 +48,7 @@ app.use("/api/actividades", actividadRoutes);
 app.use("/api/inscripciones", inscripcionActividadRoutes);
 app.use("/api/movimientos", movimientoContableRoutes);
 app.use("/api/auth", authRouter);
+app.use("/api/solicitudes-alta", solicitudAltaRoutes);
 
 
 /**

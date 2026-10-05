@@ -78,7 +78,7 @@ export async function googleCallbackController(
 
     const payload = ticket.getPayload();
 
-    if (!payload) {
+    if (!payload || !payload.sub || !payload.email || payload.email_verified !== true) {
       res.status(401).json({
         message: "No se pudo obtener la identidad de Google",
         code: "GOOGLE_IDENTITY_NOT_FOUND",
@@ -92,7 +92,7 @@ export async function googleCallbackController(
   const result = await authenticateWithOAuth(
   "Google",
   payload.sub,
-  payload.email ?? ""
+  payload.email
 );
 
     res.status(200).json(result);

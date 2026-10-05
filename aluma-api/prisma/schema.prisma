@@ -34,6 +34,7 @@ model CuentaAutenticacion {
   updateAt      DateTime @default(now()) @db.DateTime(0)
   Usuario       Usuario  @relation(fields: [id_usuario], references: [id_usuario], onUpdate: Restrict, map: "fk_cuenta_usuario")
 
+  @@unique([proveedor, external_id], map: "uq_cuenta_proveedor_external")
   @@index([id_usuario], map: "fk_cuenta_usuario")
 }
 
@@ -120,6 +121,7 @@ model RolUsuario {
 }
 
 model TipoDocumentoIdentificacion {
+  SolicitudAlta SolicitudAlta[]
   id_tipo_documento Int       @id @default(autoincrement())
   nombre            String    @unique(map: "nombre") @db.VarChar(30)
   Usuario           Usuario[]
@@ -135,6 +137,8 @@ model TipoMovimiento {
 }
 
 model Usuario {
+  SolicitudesResueltas SolicitudAlta[] @relation("AdministradorSolicitud")
+  SolicitudOrigen SolicitudAlta? @relation("UsuarioSolicitud")
   id_usuario                  Int                         @id @default(autoincrement())
   codUsuario                  String?                     @unique(map: "codUsuario") @db.VarChar(10)
   id_tipo_documento           Int
@@ -188,4 +192,36 @@ model Auditoria {
   @@index([recurso, id_recurso, fecha_evento, id_auditoria], map: "idx_auditoria_recurso_fecha")
   @@index([accion, fecha_evento, id_auditoria], map: "idx_auditoria_accion_fecha")
   @@index([requestId, id_auditoria], map: "idx_auditoria_request")
+}
+
+model EstadoSolicitud {
+  id_estado_solicitud Int @id @default(autoincrement())
+  nombre String @unique @db.VarChar(20)
+  SolicitudAlta SolicitudAlta[]
+}
+
+model SolicitudAlta {
+  id_solicitud Int @id @default(autoincrement())
+  proveedor String @db.VarChar(20)
+  external_id String @db.VarChar(255)
+  email String @db.VarChar(254)
+  id_tipo_documento Int
+  numeroDocumento String @db.VarChar(20)
+  nombre String @db.VarChar(50)
+  apellido1 String? @db.VarChar(50)
+  apellido2 String? @db.VarChar(50)
+  telefono String? @db.VarChar(15)
+  socio Boolean
+  id_estado_solicitud Int
+  fechaSolicitud DateTime @default(now()) @db.DateTime(3)
+  fechaResolucion DateTime? @db.DateTime(3)
+  id_administrador_resolucion Int?
+  motivoRechazo String? @db.VarChar(500)
+  id_usuario_creado Int? @unique
+  EstadoSolicitud EstadoSolicitud @relation(fields: [id_estado_solicitud], references: [id_estado_solicitud], onDelete: Restrict, onUpdate: Restrict)
+  TipoDocumentoIdentificacion TipoDocumentoIdentificacion @relation(fields: [id_tipo_documento], references: [id_tipo_documento], onDelete: Restrict, onUpdate: Restrict)
+  AdministradorResolucion Usuario? @relation("AdministradorSolicitud", fields: [id_administrador_resolucion], references: [id_usuario], onDelete: Restrict, onUpdate: Restrict)
+  UsuarioCreado Usuario? @relation("UsuarioSolicitud", fields: [id_usuario_creado], references: [id_usuario], onDelete: Restrict, onUpdate: Restrict)
+  @@unique([proveedor, external_id], map: "uq_solicitud_proveedor_external")
+  @@index([id_estado_solicitud, fechaSolicitud])
 }
