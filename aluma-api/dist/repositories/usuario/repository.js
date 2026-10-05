@@ -143,6 +143,7 @@ export async function findUserByEmail(email, client = prisma) {
         where: {
             email,
         },
+        include: { EstadoUsuario: true },
     });
 }
 //# sourceMappingURL=repository.js.map

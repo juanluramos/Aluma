@@ -195,6 +195,13 @@ test('Permisos y consistencia contable de inscripciones', async (t) => {
         id_metodo_pago: method.id_metodo_pago, fechaPago: '2026-10-02',
       }), 200);
       expectStatus(await request('GET', `/inscripciones/${owned}`, 'Usuario'), 403);
+      const before = await prisma.inscripcionActividad.findUniqueOrThrow({ where: { id_inscripcion: owned } });
+      const rejected = await request('PUT', `/inscripciones/${owned}`, 'Operador', payment);
+      expectStatus(rejected, 409);
+      assert.equal(rejected.body.code, 'INVALID_PAYMENT_TRANSITION');
+      assert.deepEqual(await prisma.inscripcionActividad.findUniqueOrThrow({ where: { id_inscripcion: owned } }), before);
+      assert.equal(await prisma.movimientoContable.count({ where: { id_inscripcion: owned } }), 0);
+      assert.equal(await prisma.auditoria.count({ where: { requestId: rejected.requestId } }), 0);
       expectStatus(await request('PUT', `/inscripciones/${owned}`, 'Administrador', {
         ...payload(activities[0]!), id_metodo_pago: null, fechaPago: null,
       }), 200);
@@ -205,6 +212,10 @@ test('Permisos y consistencia contable de inscripciones', async (t) => {
       for (const [role, body, expected] of [
         ['Usuario', payment, 403],
         ['Operador', { id_estado_pago: paid.id_estado_pago }, 400],
+        ['Operador', { ...payment, fechaPago: null }, 400],
+        ['Operador', { ...payment, id_metodo_pago: null }, 400],
+        ['Operador', { id_estado_pago: 2147483647 }, 404],
+        ['Operador', { id_estado_pago: 0 }, 400],
         ['Administrador', { ...payment, precioAplicado: 0 }, 400],
       ] as const) {
         const rejected = await request('PUT', `/inscripciones/${owned}`, role, body);
@@ -492,7 +503,8 @@ test('Permisos y consistencia contable de inscripciones', async (t) => {
             expectStatus(failed, 500);
             assert.equal(calls, 1);
             assert.equal(inserted, afterInsert);
-            assert(logMock.mock.calls.some(call => call.arguments.includes(failure)));
+            assert(logMock.mock.calls.some(call => String(call.arguments[0]).includes('INTERNAL_SERVER_ERROR')));
+          assert(!logMock.mock.calls.some(call => call.arguments.includes(failure)));
             assert.deepEqual(await prisma.inscripcionActividad.findUnique({ where: { id_inscripcion: id } }), before);
             assert.equal(await prisma.auditoria.count({ where: { requestId: failed.requestId } }), 0);
           } finally {
@@ -543,7 +555,8 @@ test('Permisos y consistencia contable de inscripciones', async (t) => {
           expectStatus(result, 500);
           assert.equal(calls, 1);
           assert.equal(inserted, afterInsert);
-          assert(logMock.mock.calls.some(call => call.arguments.includes(failure)));
+          assert(logMock.mock.calls.some(call => String(call.arguments[0]).includes('INTERNAL_SERVER_ERROR')));
+          assert(!logMock.mock.calls.some(call => call.arguments.includes(failure)));
           assert.deepEqual(await prisma.inscripcionActividad.findUnique({ where }), target);
           assert.equal(await prisma.auditoria.count({ where: { requestId: result.requestId } }), 0);
         } finally {
@@ -675,7 +688,8 @@ test('Permisos y consistencia contable de inscripciones', async (t) => {
           expectStatus(result, 500);
           assert.equal(calls, mode === 'pending' || mode === 'paid-first' ? 1 : 2);
           assert(enrollmentId > 0);
-          assert(logMock.mock.calls.some(call => call.arguments.includes(failure)));
+          assert(logMock.mock.calls.some(call => String(call.arguments[0]).includes('INTERNAL_SERVER_ERROR')));
+          assert(!logMock.mock.calls.some(call => call.arguments.includes(failure)));
           assert.equal(await prisma.inscripcionActividad.count({ where: { id_actividad: activity.id_actividad } }), 0);
           assert.equal(await prisma.movimientoContable.count({ where: { id_inscripcion: enrollmentId } }), 0);
           assert.equal(await prisma.auditoria.count({ where: { requestId: result.requestId } }), 0);

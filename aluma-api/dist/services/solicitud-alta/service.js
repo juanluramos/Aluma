@@ -58,6 +58,15 @@ export async function resolveApplication(id, adminId, input) {
             id_administrador_resolucion: adminId, id_usuario_creado: userId,
             motivoRechazo: input.decision === 'Rechazar' ? input.motivo : null,
         }, tx);
-    });
+    }, { isolationLevel: 'ReadCommitted' });
+}
+export function listApplications(skip, take) {
+    return repository.listSolicitudes(skip, take);
+}
+export async function getApplication(id) {
+    const row = await repository.getSolicitud(id);
+    if (!row)
+        throw new AppError('Solicitud no encontrada', 404, 'APPLICATION_NOT_FOUND');
+    return row;
 }
 //# sourceMappingURL=service.js.map

@@ -35,7 +35,8 @@ Estados de inscripcion: 1 `Activa`, 2 `Cerrada`. Metodo 1: `Bizum`. Estado de ac
 | Alta Pendiente/Cancelado | Campos del DTO; siempre Activa | Ninguno |
 | Alta Pagado | Precio positivo, metodo y fecha | Inscripcion y Cobro atomicos |
 | Sin movimientos | Pendiente <-> Cancelado; correcciones de campos del DTO | Ninguno |
-| Pendiente/Cancelado -> Pagado | Estado final Activa, precio positivo, metodo y fecha | Un Cobro positivo |
+| Pendiente -> Pagado | Estado final Activa, precio positivo, metodo y fecha | Un Cobro positivo |
+| Cancelado -> Pagado | Rechazado (409); debe pasar primero a Pendiente | Ninguno |
 | Pagado -> Devolucion | Solo estado de pago, comentario y cierre | Un movimiento por el importe cobrado en negativo; Cerrada |
 | Tras cobro | Solo comentario, salvo devolucion | Ninguno al editar comentario |
 | Tras devolucion | Solo comentario | Ninguno |

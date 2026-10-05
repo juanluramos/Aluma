@@ -1,8 +1,7 @@
 import { z } from 'zod';
 import { verifyRegistrationToken } from '../../utils/registration-token.js';
 import { createSolicitudSchema, resolveSolicitudSchema } from '../../dtos/solicitud-alta/dto.js';
-import { submitSolicitud, getOwnSolicitud, resolveApplication } from '../../services/solicitud-alta/service.js';
-import { listSolicitudes, getSolicitud } from '../../repositories/solicitud-alta/repository.js';
+import { submitSolicitud, getOwnSolicitud, resolveApplication, listApplications, getApplication } from '../../services/solicitud-alta/service.js';
 import { AppError } from '../../errors/app-error.js';
 function id(req) {
     const value = Number(req.params.id);
@@ -24,13 +23,10 @@ export async function list(req, res) {
     const parsed = z.object({ page: z.coerce.number().int().min(1).max(100000).default(1), limit: z.coerce.number().int().min(1).max(100).default(25) }).safeParse(req.query);
     if (!parsed.success)
         throw new AppError('Paginación inválida', 400, 'VALIDATION_ERROR');
-    res.json(await listSolicitudes((parsed.data.page - 1) * parsed.data.limit, parsed.data.limit));
+    res.json(await listApplications((parsed.data.page - 1) * parsed.data.limit, parsed.data.limit));
 }
 export async function detail(req, res) {
-    const row = await getSolicitud(id(req));
-    if (!row)
-        throw new AppError('Solicitud no encontrada', 404, 'APPLICATION_NOT_FOUND');
-    res.json(row);
+    res.json(await getApplication(id(req)));
 }
 export async function resolve(req, res) {
     const parsed = resolveSolicitudSchema.safeParse(req.body);

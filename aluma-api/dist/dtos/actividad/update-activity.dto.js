@@ -32,6 +32,8 @@ export const updateActivitySchema = z
     importeSocio: z
         .number()
         .nonnegative()
+        .max(99999999.99)
+        .multipleOf(0.01)
         .nullable()
         .optional(),
     /**
@@ -40,6 +42,8 @@ export const updateActivitySchema = z
     importeNoSocio: z
         .number()
         .nonnegative()
+        .max(99999999.99)
+        .multipleOf(0.01)
         .nullable()
         .optional(),
     /**
@@ -48,7 +52,7 @@ export const updateActivitySchema = z
     id_estado_actividad: z
         .number()
         .int()
-        .positive()
+        .positive().max(2147483647)
         .optional(),
     /**
      * Comentario de la actividad.

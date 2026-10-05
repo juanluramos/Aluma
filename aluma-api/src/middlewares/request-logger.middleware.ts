@@ -23,7 +23,7 @@ export function requestLogger(
     const role = req.user?.rol ?? "anonymous";
 
     console.log(
-      `[HTTP] ${req.method} ${req.originalUrl} ` +
+      `[HTTP] ${req.method} ${req.path} ` +
       `status=${res.statusCode} ` +
       `user=${userId} ` +
       `role=${role} ` +

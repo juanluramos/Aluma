@@ -2,22 +2,64 @@ import type { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 
 import { JWT_SECRET } from "../../config/jwt.js";
+import { prisma } from "../../config/prisma.js";
+
+export type Role =
+  | "Usuario"
+  | "Operador"
+  | "Administrador";
 
 export interface AuthTokenPayload {
   id_usuario: number;
-  rol: string;
+  rol: Role;
   iat: number;
   exp: number;
 }
 
 /**
+ * Comprueba que un valor sea un rol válido de ALUMA.
+ */
+function isValidRole(value: unknown): value is Role {
+  return (
+    value === "Usuario" ||
+    value === "Operador" ||
+    value === "Administrador"
+  );
+}
+
+/**
+ * Comprueba que el payload del JWT tenga una estructura válida.
+ */
+function isValidAuthTokenPayload(
+  payload: unknown
+): payload is AuthTokenPayload {
+  if (
+    typeof payload !== "object" ||
+    payload === null
+  ) {
+    return false;
+  }
+
+  const data = payload as Record<string, unknown>;
+
+  return (
+    typeof data.id_usuario === "number" &&
+    Number.isSafeInteger(data.id_usuario) &&
+    data.id_usuario > 0 &&
+    isValidRole(data.rol) &&
+    typeof data.iat === "number" && Number.isSafeInteger(data.iat) && data.iat >= 0 &&
+    typeof data.exp === "number" && Number.isSafeInteger(data.exp) && data.exp > data.iat
+  );
+}
+
+/**
  * Comprueba que la petición contiene un JWT válido.
  */
-export function authenticate(
+export async function requireAuth(
   req: Request,
   res: Response,
   next: NextFunction
-): void {
+): Promise<void> {
   const authorization = req.headers.authorization;
 
   if (!authorization) {
@@ -29,9 +71,10 @@ export function authenticate(
     return;
   }
 
-  const [type, token] = authorization.split(" ");
+  const parts = authorization.split(" ");
+  const [type, token] = parts;
 
-  if (type !== "Bearer" || !token) {
+  if (parts.length !== 2 || type !== "Bearer" || !token) {
     res.status(401).json({
       message: "Formato de token inválido",
       code: "INVALID_AUTH_TOKEN",
@@ -41,15 +84,57 @@ export function authenticate(
   }
 
   try {
-    const payload = jwt.verify(token, JWT_SECRET) as AuthTokenPayload;
+    const payload = jwt.verify(
+      token,
+      JWT_SECRET,
+      { algorithms: ["HS256"] }
+    );
 
-    req.user = payload;
+    if (!isValidAuthTokenPayload(payload)) {
+      res.status(401).json({
+        message: "Token inválido o expirado",
+        code: "INVALID_AUTH_TOKEN",
+      });
 
-    next();
+      return;
+    }
+
+    req.user = { id_usuario: payload.id_usuario, rol: payload.rol, iat: payload.iat, exp: payload.exp };
+
   } catch {
     res.status(401).json({
       message: "Token inválido o expirado",
       code: "INVALID_AUTH_TOKEN",
     });
+    return;
+  }
+  try {
+    const user = await prisma.usuario.findUnique({
+      where: { id_usuario: req.user!.id_usuario },
+      select: { EstadoUsuario: { select: { permiteLogin: true } }, RolUsuario: { select: { nombre_rol: true } } },
+    });
+    if (!user) {
+      res.status(401).json({ message: "Usuario no encontrado", code: "INVALID_AUTH_TOKEN" });
+      return;
+    }
+    if (!user.EstadoUsuario.permiteLogin) {
+      res.status(403).json({ message: "El usuario no tiene permitido iniciar sesión", code: "LOGIN_NOT_ALLOWED" });
+      return;
+    }
+    if (!isValidRole(user.RolUsuario.nombre_rol)) {
+      res.status(403).json({ message: "Rol de usuario no válido", code: "FORBIDDEN" });
+      return;
+    }
+    req.user!.rol = user.RolUsuario.nombre_rol;
+    next();
+  } catch (error) {
+    next(error);
   }
 }
+
+/**
+ * Alias compatible con el middleware anterior.
+ *
+ * Se mantiene para no romper las rutas existentes.
+ */
+export const authenticate = requireAuth;

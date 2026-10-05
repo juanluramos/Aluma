@@ -200,5 +200,6 @@ export async function findUserByEmail(
     where: {
       email,
     },
+    include: { EstadoUsuario: true },
   });
 }

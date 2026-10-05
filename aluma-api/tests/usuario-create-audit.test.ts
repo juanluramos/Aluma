@@ -136,7 +136,8 @@ test('Creacion HTTP de usuarios y auditoria atomica', async (t) => {
           assert.equal(result.body.code, 'INTERNAL_SERVER_ERROR');
           assert.equal(calls, 1);
           assert(userId > 0);
-          assert(logMock.mock.calls.some(call => call.arguments.includes(failure)));
+          assert(logMock.mock.calls.some(call => String(call.arguments[0]).includes('INTERNAL_SERVER_ERROR')));
+          assert(!logMock.mock.calls.some(call => call.arguments.includes(failure)));
           assert.equal(await prisma.usuario.findUnique({ where: { email: data.email } }), null);
           assert.equal(await prisma.auditoria.count({ where: { requestId: result.requestId } }), 0);
           assert.equal(await prisma.auditoria.count({ where: { recurso: 'USUARIO', id_recurso: userId } }), 0);

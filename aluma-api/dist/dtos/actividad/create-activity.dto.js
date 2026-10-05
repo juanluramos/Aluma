@@ -32,6 +32,8 @@ export const createActivitySchema = z.object({
     importeSocio: z
         .number()
         .nonnegative()
+        .max(99999999.99)
+        .multipleOf(0.01)
         .nullable()
         .optional(),
     /**
@@ -41,6 +43,8 @@ export const createActivitySchema = z.object({
     importeNoSocio: z
         .number()
         .nonnegative()
+        .max(99999999.99)
+        .multipleOf(0.01)
         .nullable()
         .optional(),
     /**
@@ -51,7 +55,7 @@ export const createActivitySchema = z.object({
     id_estado_actividad: z
         .number()
         .int()
-        .positive(),
+        .positive().max(2147483647),
     /**
      * Comentario adicional sobre la actividad.
      */

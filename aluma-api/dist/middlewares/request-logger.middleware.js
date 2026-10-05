@@ -13,7 +13,7 @@ export function requestLogger(req, res, next) {
         const duration = Date.now() - start;
         const userId = req.user?.id_usuario ?? "anonymous";
         const role = req.user?.rol ?? "anonymous";
-        console.log(`[HTTP] ${req.method} ${req.originalUrl} ` +
+        console.log(`[HTTP] ${req.method} ${req.path} ` +
             `status=${res.statusCode} ` +
             `user=${userId} ` +
             `role=${role} ` +

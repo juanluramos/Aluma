@@ -18,7 +18,7 @@ export async function getAllAccountingMovementsController(_req, res, next) {
 export async function getAccountingMovementByIdController(req, res, next) {
     try {
         const id = Number(req.params.id);
-        if (Number.isNaN(id)) {
+        if (!Number.isSafeInteger(id) || id <= 0 || id > 2147483647) {
             res.status(400).json({
                 message: "ID de movimiento no válido",
                 code: "INVALID_ID",
@@ -57,7 +57,7 @@ export async function createAccountingMovementController(req, res, next) {
 export async function updateAccountingMovementController(req, res, next) {
     try {
         const id = Number(req.params.id);
-        if (Number.isNaN(id)) {
+        if (!Number.isSafeInteger(id) || id <= 0 || id > 2147483647) {
             res.status(400).json({
                 message: "ID no válido",
                 code: "INVALID_ID",
@@ -84,7 +84,7 @@ export async function updateAccountingMovementController(req, res, next) {
 export async function deleteAccountingMovementController(req, res, next) {
     try {
         const id = Number(req.params.id);
-        if (Number.isNaN(id)) {
+        if (!Number.isSafeInteger(id) || id <= 0 || id > 2147483647) {
             res.status(400).json({
                 message: "ID de movimiento no válido",
                 code: "INVALID_ID",

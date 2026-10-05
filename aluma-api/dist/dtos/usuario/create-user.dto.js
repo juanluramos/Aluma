@@ -14,7 +14,7 @@ export const createUserSchema = z.object({
     id_tipo_documento: z
         .number()
         .int()
-        .positive(),
+        .positive().max(2147483647),
     numeroDocumento: z
         .string()
         .trim()
@@ -36,7 +36,7 @@ export const createUserSchema = z.object({
         .max(50)
         .optional(),
     email: z
-        .string()
+        .email()
         .max(254),
     telefono: z
         .string()
@@ -46,13 +46,13 @@ export const createUserSchema = z.object({
     id_rol: z
         .number()
         .int()
-        .positive(),
+        .positive().max(2147483647),
     socio: z
         .boolean(),
     id_estado_usuario: z
         .number()
         .int()
-        .positive(),
+        .positive().max(2147483647),
     matriculaPagada: z
         .boolean(),
     comentario: z

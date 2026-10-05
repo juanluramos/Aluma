@@ -56,7 +56,7 @@ export async function getUserByIdController(
     /**
      * Comprobamos que el ID sea válido.
      */
-    if (Number.isNaN(id)) {
+    if (!Number.isSafeInteger(id) || id <= 0 || id > 2147483647) {
       res.status(400).json({
         message: "ID de usuario inválido",
         code: "INVALID_ID",
@@ -127,7 +127,7 @@ export async function updateUserController(
   try {
     const id = Number(req.params.id);
 
-    if (Number.isNaN(id)) {
+    if (!Number.isSafeInteger(id) || id <= 0 || id > 2147483647) {
       res.status(400).json({
         message: "ID no válido",
         code: "INVALID_ID",
@@ -175,7 +175,7 @@ export async function deleteUserController(
     /**
      * Comprobamos que el ID sea válido.
      */
-    if (Number.isNaN(id)) {
+    if (!Number.isSafeInteger(id) || id <= 0 || id > 2147483647) {
       res.status(400).json({
         message: "ID de usuario inválido",
         code: "INVALID_ID",

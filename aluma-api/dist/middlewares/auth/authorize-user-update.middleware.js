@@ -28,7 +28,8 @@ export function authorizeUserUpdate(req, res, next) {
         "email",
         "telefono",
     ];
-    const requestedFields = Object.keys(req.body);
+    // Dejar que Zod responda 400 ante un body ausente o no válido.
+    const requestedFields = Object.keys(req.body ?? {});
     const hasForbiddenField = requestedFields.some((field) => !allowedFields.includes(field));
     if (hasForbiddenField) {
         res.status(403).json({

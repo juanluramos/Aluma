@@ -29,7 +29,7 @@ export async function getActivityByIdController(req, res, next) {
         /**
          * Comprobamos que el ID sea válido.
          */
-        if (Number.isNaN(id)) {
+        if (!Number.isSafeInteger(id) || id <= 0 || id > 2147483647) {
             res.status(400).json({
                 message: "ID de actividad inválido",
                 code: "INVALID_ID",
@@ -76,7 +76,7 @@ export async function createActivityController(req, res, next) {
 export async function updateActivityController(req, res, next) {
     try {
         const id = Number(req.params.id);
-        if (Number.isNaN(id)) {
+        if (!Number.isSafeInteger(id) || id <= 0 || id > 2147483647) {
             res.status(400).json({
                 message: "ID no válido",
                 code: "INVALID_ID",
@@ -110,7 +110,7 @@ export async function deleteActivityController(req, res, next) {
         /**
          * Comprobamos que el ID sea válido.
          */
-        if (Number.isNaN(id)) {
+        if (!Number.isSafeInteger(id) || id <= 0 || id > 2147483647) {
             res.status(400).json({
                 message: "ID de actividad inválido",
                 code: "INVALID_ID",

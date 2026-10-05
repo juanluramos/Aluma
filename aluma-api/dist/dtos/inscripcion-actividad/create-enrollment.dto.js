@@ -10,14 +10,14 @@ export const createEnrollmentSchema = z.strictObject({
     id_usuario: z
         .number()
         .int()
-        .positive(),
+        .positive().max(2147483647),
     /**
      * Actividad a la que se inscribe.
      */
     id_actividad: z
         .number()
         .int()
-        .positive(),
+        .positive().max(2147483647),
     /**
      * Precio aplicado a la inscripción.
      */
@@ -34,7 +34,7 @@ export const createEnrollmentSchema = z.strictObject({
     id_estado_pago: z
         .number()
         .int()
-        .positive(),
+        .positive().max(2147483647),
     /**
      * Método de pago.
      *
@@ -44,7 +44,7 @@ export const createEnrollmentSchema = z.strictObject({
     id_metodo_pago: z
         .number()
         .int()
-        .positive()
+        .positive().max(2147483647)
         .nullable()
         .optional(),
     /**

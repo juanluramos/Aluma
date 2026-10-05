@@ -23,7 +23,7 @@ export function authorizeUserAccess(
 
   const requestedUserId = Number(req.params.id);
 
-  if (Number.isNaN(requestedUserId)) {
+  if (!Number.isSafeInteger(requestedUserId) || requestedUserId <= 0 || requestedUserId > 2147483647) {
     res.status(400).json({
       message: "ID de usuario inválido",
       code: "INVALID_ID",

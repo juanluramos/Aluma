@@ -134,7 +134,8 @@ test('Eliminacion HTTP de movimientos independientes y auditoria atomica', async
           assert.equal(result.status, 500);
           assert.equal(calls, 1);
           assert.equal(inserted, afterInsert);
-          assert(logMock.mock.calls.some(call => call.arguments.includes(failure)));
+          assert(logMock.mock.calls.some(call => String(call.arguments[0]).includes('INTERNAL_SERVER_ERROR')));
+          assert(!logMock.mock.calls.some(call => call.arguments.includes(failure)));
           assert.deepEqual(await prisma.movimientoContable.findUnique({ where }), before);
           assert.equal(await prisma.auditoria.count({ where: { requestId: result.requestId } }), 0);
         } finally {

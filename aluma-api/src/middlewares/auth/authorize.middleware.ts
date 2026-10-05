@@ -1,10 +1,14 @@
 import type { NextFunction, Request, Response } from "express";
 
+import type { Role } from "./authenticate.middleware.js";
+
 /**
- * Comprueba que el usuario autenticado tenga uno
- * de los roles permitidos para acceder a una ruta.
+ * Comprueba que el usuario autenticado tenga
+ * uno de los roles permitidos.
  */
-export function authorize(...allowedRoles: string[]) {
+export function requireRole(
+  ...allowedRoles: Role[]
+) {
   return (
     req: Request,
     res: Response,
@@ -21,7 +25,8 @@ export function authorize(...allowedRoles: string[]) {
 
     if (!allowedRoles.includes(req.user.rol)) {
       res.status(403).json({
-        message: "No tienes permisos para realizar esta operación",
+        message:
+          "No tienes permisos para realizar esta operación",
         code: "FORBIDDEN",
       });
 
@@ -31,3 +36,10 @@ export function authorize(...allowedRoles: string[]) {
     next();
   };
 }
+
+/**
+ * Alias compatible con el middleware anterior.
+ *
+ * Se mantiene para no romper las rutas existentes.
+ */
+export const authorize = requireRole;

@@ -12,7 +12,7 @@ export const oauthRegisterSchema = z.strictObject({
   id_tipo_documento: z
     .number()
     .int()
-    .positive(),
+    .positive().max(2147483647),
 
   numeroDocumento: z
     .string()

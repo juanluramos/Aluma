@@ -16,7 +16,7 @@ export const updateUserSchema = z.object({
   id_tipo_documento: z
     .number()
     .int()
-    .positive()
+    .positive().max(2147483647)
     .optional(),
 
   numeroDocumento: z
@@ -59,7 +59,7 @@ export const updateUserSchema = z.object({
   id_rol: z
     .number()
     .int()
-    .positive()
+    .positive().max(2147483647)
     .optional(),
 
   socio: z
@@ -69,7 +69,7 @@ export const updateUserSchema = z.object({
   id_estado_usuario: z
     .number()
     .int()
-    .positive()
+    .positive().max(2147483647)
     .optional(),
 
   matriculaPagada: z

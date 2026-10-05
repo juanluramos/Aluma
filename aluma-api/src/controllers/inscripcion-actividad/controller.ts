@@ -45,7 +45,7 @@ export async function getEnrollmentByIdController(
   try {
     const id = Number(req.params.id);
 
-    if (!Number.isSafeInteger(id) || id <= 0) {
+    if (!Number.isSafeInteger(id) || id <= 0 || id > 2147483647) {
       res.status(400).json({
         message: "ID de inscripción inválido",
         code: "INVALID_ID",
@@ -98,7 +98,7 @@ export async function updateEnrollmentController(
   try {
     const id = Number(req.params.id);
 
-    if (!Number.isSafeInteger(id) || id <= 0) {
+    if (!Number.isSafeInteger(id) || id <= 0 || id > 2147483647) {
       res.status(400).json({
         message: "ID no válido",
         code: "INVALID_ID",
@@ -138,7 +138,7 @@ export async function deleteEnrollmentController(
   try {
     const id = Number(req.params.id);
 
-    if (!Number.isSafeInteger(id) || id <= 0) {
+    if (!Number.isSafeInteger(id) || id <= 0 || id > 2147483647) {
       res.status(400).json({
         message: "ID de inscripción inválido",
         code: "INVALID_ID",

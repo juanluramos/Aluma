@@ -9,9 +9,9 @@ import { z } from "zod";
  */
 export const updateEnrollmentSchema = z
   .strictObject({
-    id_usuario: z.number().int().positive().optional(),
+    id_usuario: z.number().int().positive().max(2147483647).optional(),
 
-    id_actividad: z.number().int().positive().optional(),
+    id_actividad: z.number().int().positive().max(2147483647).optional(),
 
     precioAplicado: z
       .number()
@@ -24,19 +24,19 @@ export const updateEnrollmentSchema = z
     id_estado_pago: z
       .number()
       .int()
-      .positive()
+      .positive().max(2147483647)
       .optional(),
 
     id_estado_inscripcion: z
       .number()
       .int()
-      .positive()
+      .positive().max(2147483647)
       .optional(),
 
     id_metodo_pago: z
       .number()
       .int()
-      .positive()
+      .positive().max(2147483647)
       .nullable()
       .optional(),
 

@@ -1,8 +1,8 @@
 /**
- * Comprueba que el usuario autenticado tenga uno
- * de los roles permitidos para acceder a una ruta.
+ * Comprueba que el usuario autenticado tenga
+ * uno de los roles permitidos.
  */
-export function authorize(...allowedRoles) {
+export function requireRole(...allowedRoles) {
     return (req, res, next) => {
         if (!req.user) {
             res.status(401).json({
@@ -21,4 +21,10 @@ export function authorize(...allowedRoles) {
         next();
     };
 }
+/**
+ * Alias compatible con el middleware anterior.
+ *
+ * Se mantiene para no romper las rutas existentes.
+ */
+export const authorize = requireRole;
 //# sourceMappingURL=authorize.middleware.js.map

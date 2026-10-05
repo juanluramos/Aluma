@@ -214,6 +214,9 @@ export async function updateExistingEnrollment(id, data, context) {
         if (currentStatus.TipoMovimiento) {
             throw new AppError('El estado de pago no tiene su movimiento contable', 409, 'INCONSISTENT_ACCOUNTING_HISTORY');
         }
+        if (status.nombre_estado === 'Pagado' && currentStatus.nombre_estado !== 'Pendiente') {
+            throw new AppError('Solo se puede cobrar una inscripción pendiente de pago', 409, 'INVALID_PAYMENT_TRANSITION');
+        }
         const enrollmentStatus = await validateReferences(values, tx, id);
         validatePaymentData(status, values);
         if (status.nombre_estado === 'Pagado') {

@@ -33,7 +33,9 @@ test('SolicitudAlta y OAuth: integracion real de persistencia', async t => {
     const adminIdentity = identity();
     const admin = await prisma.usuario.create({ data: { email: adminIdentity.email, numeroDocumento: `${marker}-admin`, nombre: marker, id_tipo_documento: doc.id_tipo_documento, id_rol: adminRole.id_rol, id_estado_usuario: 1, socio: false, matriculaPagada: false } });
     const adminToken = generateToken({ id_usuario: admin.id_usuario, rol: 'Administrador' });
-    const userToken = generateToken({ id_usuario: admin.id_usuario, rol: 'Usuario' });
+    const memberIdentity = identity();
+    const member = await prisma.usuario.create({ data: { email: memberIdentity.email, numeroDocumento: `${marker}-member`, nombre: marker, id_tipo_documento: doc.id_tipo_documento, id_rol: 1, id_estado_usuario: 1, socio: false, matriculaPagada: false } });
+    const userToken = generateToken({ id_usuario: member.id_usuario, rol: 'Usuario' });
     const payload = () => ({ id_tipo_documento: doc.id_tipo_documento, numeroDocumento: `${marker}-${emails.length}`, nombre: marker, socio: true });
     async function submit() {
       const who = identity();
@@ -49,7 +51,13 @@ test('SolicitudAlta y OAuth: integracion real de persistencia', async t => {
       const verifyMock = st.mock.method(OAuth2Client.prototype, 'verifyIdToken', async () => ({ getPayload: () => ({ sub: who.external_id, email: who.email, email_verified: true }) }));
       let registrationToken: string;
       try {
-        const callback = await request('GET', '/api/auth/google/callback?code=verified-code');
+        const start = await fetch(base + '/api/auth/google/login', { redirect: 'manual' });
+        assert.equal(start.status, 302);
+        const state = new URL(start.headers.get('location')!).searchParams.get('state')!;
+        const cookie = start.headers.get('set-cookie')!.split(';')[0]!;
+        assert.equal((await request('GET', '/api/auth/google/callback?code=verified-code')).body.code, 'INVALID_OAUTH_STATE');
+        const response = await fetch(base + `/api/auth/google/callback?code=verified-code&state=${encodeURIComponent(state)}`, { headers: { Cookie: cookie } });
+        const callback = { status: response.status, body: await response.json() };
         assert.equal(callback.status, 200); assert.equal(callback.body.type, 'registration_required');
         registrationToken = callback.body.registrationToken;
         assert.equal(tokenMock.mock.calls.length, 1); assert.equal(verifyMock.mock.calls.length, 1);
@@ -84,7 +92,11 @@ test('SolicitudAlta y OAuth: integracion real de persistencia', async t => {
     await t.test('rechazo, motivo obligatorio y estado visible sin crear usuario/cuenta', async () => {
       const { who, row } = await submit();
       assert.equal((await request('POST', `/api/solicitudes-alta/${row.id_solicitud}/resolucion`, adminToken, { decision: 'Rechazar', motivo: '' })).status, 400);
+      assert.equal((await request('POST', `/api/solicitudes-alta/${row.id_solicitud}/resolucion`, adminToken, { decision: 'Pendiente' })).status, 400);
       const result = await request('POST', `/api/solicitudes-alta/${row.id_solicitud}/resolucion`, adminToken, { decision: 'Rechazar', motivo: 'No cumple requisitos' });
+      for (const decision of ['Aceptar', 'Rechazar']) {
+        assert.equal((await request('POST', `/api/solicitudes-alta/${row.id_solicitud}/resolucion`, adminToken, decision === 'Aceptar' ? { decision } : { decision, motivo: 'Otro motivo' })).status, 409);
+      }
       assert.equal(result.status, 200); assert.equal(result.body.EstadoSolicitud.nombre, 'Rechazada');
       assert.equal(result.body.id_administrador_resolucion, admin.id_usuario); assert(result.body.fechaResolucion); assert.equal(result.body.motivoRechazo, 'No cumple requisitos');
       assert.equal(result.body.id_usuario_creado, null);
@@ -93,8 +105,29 @@ test('SolicitudAlta y OAuth: integracion real de persistencia', async t => {
     });
     await t.test('resoluciones concurrentes: exactamente una decision', async () => {
       const { who, row } = await submit();
-      const results = await Promise.all(['Aceptar', 'Aceptar'].map(decision => request('POST', `/api/solicitudes-alta/${row.id_solicitud}/resolucion`, adminToken, { decision })));
+      // Ambas transacciones leen al administrador antes de competir por el bloqueo.
+      const original = prisma.$transaction; const run = original.bind(prisma);
+      let reads = 0; let release!: () => void;
+      const ready = new Promise<void>(resolve => { release = resolve; });
+      prisma.$transaction = (async (operation: (tx: Prisma.TransactionClient) => Promise<unknown>, options?: { isolationLevel?: Prisma.TransactionIsolationLevel }) => run(async tx => {
+        const isolated = new Proxy(tx, {
+          get(target, property) {
+            if (property !== '$queryRaw') return Reflect.get(target, property);
+            return async (...args: Parameters<typeof tx.$queryRaw>) => {
+              if (++reads === 2) release();
+              await ready;
+              return tx.$queryRaw(...args);
+            };
+          },
+        });
+        return operation(isolated);
+      }, options)) as typeof original;
+      let results;
+      try {
+        results = await Promise.all(['Aceptar', 'Aceptar'].map(decision => request('POST', `/api/solicitudes-alta/${row.id_solicitud}/resolucion`, adminToken, { decision })));
+      } finally { prisma.$transaction = original; }
       assert.deepEqual(results.map(r => r.status).sort(), [200, 409]);
+      assert.equal(results.find(r => r.status === 409)!.body.code, 'APPLICATION_ALREADY_RESOLVED');
       assert.equal(await prisma.usuario.count({ where: { email: who.email } }), 1); assert.equal(await prisma.cuentaAutenticacion.count({ where: { email: who.email } }), 1);
     });
     await t.test('fallo al crear cuenta revierte usuario y solicitud', async st => {

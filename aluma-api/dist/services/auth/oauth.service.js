@@ -74,6 +74,9 @@ export async function authenticateWithOAuth(proveedor, externalId, email) {
      * Vinculamos la cuenta OAuth.
      */
     if (user) {
+        if (!user.EstadoUsuario.permiteLogin) {
+            throw new AppError('El usuario no tiene permitido iniciar sesión', 403, 'LOGIN_NOT_ALLOWED');
+        }
         const linkedAccount = await linkOAuthAccount(user.id_usuario, proveedor, email, externalId);
         return {
             type: "linked",
