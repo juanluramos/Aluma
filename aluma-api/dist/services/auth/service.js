@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import { createAudit } from "../auditoria/service.js";
 import { findLocalAccountByEmail } from "../../repositories/auth/repository.js";
 import { AppError } from "../../errors/app-error.js";
-import { generateToken } from "../../utils/jwt.js";
+import { startSession } from "./session.service.js";
 // Eventos independientes: su persistencia nunca cambia el resultado del login.
 async function auditLogin(requestId, codigo_error, actor) {
     const accion = codigo_error === null ? 'LOGIN_REALIZADO' : 'LOGIN_RECHAZADO';
@@ -53,13 +53,11 @@ export async function loginUser(email, password, requestId) {
         await auditLogin(requestId, 'LOGIN_NOT_ALLOWED', actor);
         throw new AppError("El usuario no tiene permitido iniciar sesión", 403, "LOGIN_NOT_ALLOWED");
     }
-    const token = generateToken({
+    const session = await startSession({
         id_usuario: account.Usuario.id_usuario,
         rol: account.Usuario.RolUsuario.nombre_rol,
     });
     await auditLogin(requestId, null, actor);
-    return {
-        token,
-    };
+    return session;
 }
 //# sourceMappingURL=service.js.map

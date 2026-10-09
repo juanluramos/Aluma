@@ -1,3 +1,4 @@
+import { initSocket } from '../src/socket/socket.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
@@ -19,6 +20,7 @@ test('Creacion HTTP de usuarios y auditoria atomica', async (t) => {
   app.use('/api/usuarios', userRoutes);
   app.use(errorMiddleware);
   const server = app.listen(0, '127.0.0.1');
+  initSocket(server);
   await once(server, 'listening');
   const address = server.address();
   assert(address && typeof address !== 'string');

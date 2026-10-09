@@ -3,7 +3,7 @@ import { createAudit } from "../auditoria/service.js";
 
 import { findLocalAccountByEmail } from "../../repositories/auth/repository.js";
 import { AppError } from "../../errors/app-error.js";
-import { generateToken } from "../../utils/jwt.js";
+import { startSession } from "./session.service.js";
 
 
 // Eventos independientes: su persistencia nunca cambia el resultado del login.
@@ -81,14 +81,12 @@ export async function loginUser(email: string, password: string, requestId: stri
     );
   }
 
-  const token = generateToken({
+  const session = await startSession({
     id_usuario: account.Usuario.id_usuario,
     rol: account.Usuario.RolUsuario.nombre_rol,
   });
 
   await auditLogin(requestId, null, actor);
 
-  return {
-    token,
-  };
+  return session;
 }

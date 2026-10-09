@@ -3,7 +3,7 @@ import { createRegistrationToken } from "../../utils/registration-token.js";
 import { findOAuthAccount, createOAuthAccount } from '../../repositories/auth/repository.js';
 import { findUserByEmail } from '../../repositories/usuario/repository.js';
 import { AppError } from '../../errors/app-error.js';
-import { generateToken } from '../../utils/jwt.js';
+import { startSession } from './session.service.js';
 /**
  * Busca un usuario existente mediante su email.
  */
@@ -54,13 +54,13 @@ export async function authenticateWithOAuth(proveedor, externalId, email) {
         if (!account.Usuario.EstadoUsuario.permiteLogin) {
             throw new AppError("El usuario no tiene permitido iniciar sesión", 403, "LOGIN_NOT_ALLOWED");
         }
-        const token = generateToken({
+        const session = await startSession({
             id_usuario: account.Usuario.id_usuario,
             rol: account.Usuario.RolUsuario.nombre_rol,
         });
         return {
             type: "login",
-            token,
+            ...session,
         };
     }
     /**

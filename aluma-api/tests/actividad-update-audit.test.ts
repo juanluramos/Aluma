@@ -70,6 +70,31 @@ test('Modificacion HTTP de actividades y auditoria atomica', async (t) => {
     const where = { id_actividad: activity.id_actividad };
     const path = `/actividades/${activity.id_actividad}`;
 
+    await t.test('Aforo: persistencia, consulta, actualizacion parcial y auditoria', async () => {
+      assert.equal(activity.aforo, null);
+      const token = actors[0]!.token;
+      const result = await request('PUT', path, { aforo: 40 }, token);
+      assert.equal(result.status, 200);
+      assert.equal(result.body.aforo, 40);
+      assert.equal((await prisma.actividad.findUniqueOrThrow({ where })).aforo, 40);
+      const audit = await prisma.auditoria.findFirstOrThrow({ where: { requestId: result.requestId } });
+      assert.deepEqual(audit.detalles, { cambios: { aforo: { anterior: null, nuevo: 40 } } });
+      const partial = await request('PUT', path, { comentario: null }, token);
+      assert.equal(partial.status, 200);
+      assert.equal(partial.body.aforo, 40);
+      for (const endpoint of [path, '/actividades']) {
+        const response = await fetch(base + endpoint, { headers: { Authorization: `Bearer ${token}` } });
+        assert.equal(response.status, 200);
+        const body = await response.json();
+        assert.equal((Array.isArray(body) ? body.find(row => row.id_actividad === activity.id_actividad) : body).aforo, 40);
+      }
+      for (const aforo of [0, -1, '40', 1.5]) {
+        const invalid = await request('PUT', path, { aforo }, token);
+        assert.equal(invalid.status, 400);
+      }
+      assert.equal((await prisma.actividad.findUniqueOrThrow({ where })).aforo, 40);
+    });
+
     for (const actor of actors.slice(0, 2)) {
       await t.test(`${actor.role}: contexto correcto, cambios exactos y auditoria unica`, async () => {
         const before = await prisma.actividad.findUniqueOrThrow({ where });

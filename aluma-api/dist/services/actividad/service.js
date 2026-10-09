@@ -69,6 +69,7 @@ export async function updateExistingActivity(id, data, context) {
         // Solo campos editables; normalizar fechas y decimales sin perder precision.
         const valores = (activity) => ({
             titulo: activity.titulo,
+            aforo: activity.aforo,
             fecha: activity.fecha?.toISOString() ?? null,
             importeSocio: activity.importeSocio?.toFixed(2) ?? null,
             importeNoSocio: activity.importeNoSocio?.toFixed(2) ?? null,

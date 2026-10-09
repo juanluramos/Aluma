@@ -308,20 +308,20 @@ test('Permisos y consistencia contable de inscripciones', async (t) => {
         accion: 'INSCRIPCION_ELIMINADA', recurso: 'INSCRIPCION_ACTIVIDAD', id_recurso: other,
       } }), audits);
     });
-    await t.test('No se pueden crear, cambiar, desvincular ni borrar movimientos de inscripción', async () => {
-      for (const role of ['Operador', 'Administrador']) {
-        expectStatus(await request('GET', '/movimientos', role), 200);
-        expectStatus(await request('GET', `/movimientos/${chargeId}`, role), 200);
+    await t.test('Movimientos vinculados: Administrador consulta pero no altera; Operador y Usuario reciben 403', async () => {
+      for (const role of ['Administrador', 'Operador', 'Usuario']) {
+        const canAccess = role === 'Administrador';
+        expectStatus(await request('GET', '/movimientos', role), canAccess ? 200 : 403);
+        expectStatus(await request('GET', `/movimientos/${chargeId}`, role), canAccess ? 200 : 403);
         expectStatus(await request('POST', '/movimientos', role, {
           id_tipo_movimiento: adjustment.id_tipo_movimiento, concepto: marker, importe: 1,
           fecha: '2026-10-01', id_inscripcion: owned,
-        }), 409);
+        }), canAccess ? 409 : 403);
         for (const body of [{ importe: 999 }, { id_inscripcion: null }, { comentario: 'cambio' }]) {
-          expectStatus(await request('PUT', `/movimientos/${chargeId}`, role, body), 409);
+          expectStatus(await request('PUT', `/movimientos/${chargeId}`, role, body), canAccess ? 409 : 403);
         }
+        expectStatus(await request('DELETE', `/movimientos/${chargeId}`, role), canAccess ? 409 : 403);
       }
-      expectStatus(await request('DELETE', `/movimientos/${chargeId}`, 'Administrador'), 409);
-      expectStatus(await request('DELETE', `/movimientos/${chargeId}`, 'Operador'), 403);
     });
     await t.test('Devoluciones concurrentes: importe del cobro, cierre persistido y una sola devolución', async () => {
       expectStatus(await request('PUT', `/inscripciones/${owned}`, 'Operador', {
@@ -699,18 +699,33 @@ test('Permisos y consistencia contable de inscripciones', async (t) => {
         }
       });
     }
-    await t.test('Movimientos independientes mantienen permisos y no pueden asociarse posteriormente', async () => {
-      for (const role of ['Operador', 'Administrador']) {
-        const result = await request('POST', '/movimientos', role, {
-          id_tipo_movimiento: adjustment.id_tipo_movimiento, concepto: marker, importe: 5, fecha: '2026-10-01',
-        });
-        expectStatus(result, 201);
-        const id = result.body.id_movimiento; independentMovements.push(id);
-        expectStatus(await request('PUT', `/movimientos/${id}`, role, { importe: 6 }), 200);
-        expectStatus(await request('PUT', `/movimientos/${id}`, role, { id_inscripcion: owned }), 409);
-        expectStatus(await request('DELETE', `/movimientos/${id}`, 'Operador'), 403);
-        expectStatus(await request('DELETE', `/movimientos/${id}`, 'Administrador'), 204);
+    await t.test('Solo Administrador gestiona movimientos independientes; asociarlos posteriormente sigue prohibido', async () => {
+      const data = {
+        id_tipo_movimiento: adjustment.id_tipo_movimiento, concepto: marker, importe: 5, fecha: '2026-10-01',
+      };
+      const result = await request('POST', '/movimientos', 'Administrador', data);
+      expectStatus(result, 201);
+      const id = result.body.id_movimiento; independentMovements.push(id);
+      const where = { id_movimiento: id };
+      const before = await prisma.movimientoContable.findUniqueOrThrow({ where });
+      const count = await prisma.movimientoContable.count({ where: { concepto: marker } });
+      for (const role of ['Operador', 'Usuario']) {
+        const rejected = [
+          await request('POST', '/movimientos', role, data),
+          await request('PUT', `/movimientos/${id}`, role, { importe: 6 }),
+          await request('DELETE', `/movimientos/${id}`, role),
+        ];
+        for (const response of rejected) {
+          expectStatus(response, 403);
+          assert.equal(response.body.code, 'FORBIDDEN');
+          assert.equal(await prisma.auditoria.count({ where: { requestId: response.requestId } }), 0);
+        }
+        assert.deepEqual(await prisma.movimientoContable.findUnique({ where }), before);
+        assert.equal(await prisma.movimientoContable.count({ where: { concepto: marker } }), count);
       }
+      expectStatus(await request('PUT', `/movimientos/${id}`, 'Administrador', { importe: 6 }), 200);
+      expectStatus(await request('PUT', `/movimientos/${id}`, 'Administrador', { id_inscripcion: owned }), 409);
+      expectStatus(await request('DELETE', `/movimientos/${id}`, 'Administrador'), 204);
     });
   } finally {
     server.close();

@@ -6,6 +6,9 @@ import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from '../../config/jwt.js';
 import { AppError } from '../../errors/app-error.js';
 
+import { sendSession, readRefreshCookie } from "./session.controller.js";
+import { endSession } from "../../services/auth/session.service.js";
+
 const stateCookie = 'aluma_oauth_state';
 const cookieOptions = { httpOnly: true, sameSite: 'lax' as const, path: '/api/auth/google', maxAge: 600000 };
 
@@ -114,7 +117,13 @@ export async function googleCallbackController(
   payload.email
 );
 
-    res.status(200).json(result);
+    if (result.type === 'login') {
+      await endSession(readRefreshCookie(req));
+      sendSession(req, res, result, { type: result.type });
+    } else {
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(200).json(result);
+    }
   } catch (error) {
     next(error);
   }

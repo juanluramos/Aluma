@@ -69,12 +69,14 @@ test('Creacion HTTP de actividades y auditoria atomica', async (t) => {
     }
     for (const actor of actors.slice(0, 2)) {
       await t.test(`${actor.role}: HTTP 201, actividad y unica auditoria con contexto correcto`, async () => {
-        const data = payload();
+        const data = { ...payload(), ...(actor.role === 'Operador' ? { aforo: 30 } : {}) };
         const result = await post('/actividades', data, actor.token);
         assert.equal(result.status, 201);
         const activities = await prisma.actividad.findMany({ where: { titulo: data.titulo } });
         assert.equal(activities.length, 1);
         assert.equal(activities[0]!.id_actividad, result.body.id_actividad);
+        assert.equal(result.body.aforo, data.aforo ?? null);
+        assert.equal(activities[0]!.aforo, data.aforo ?? null);
         const audits = await prisma.auditoria.findMany({ where: { requestId: result.requestId } });
         assert.equal(audits.length, 1);
         const audit = audits[0]!;

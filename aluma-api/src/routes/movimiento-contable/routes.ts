@@ -17,7 +17,7 @@ import { createAccountingMovementSchema } from "../../dtos/movimiento-contable/c
 import { updateAccountingMovementSchema } from "../../dtos/movimiento-contable/update-accounting-movement.dto.js";
 
 const router = Router();
-router.use(authenticate, authorize("Operador", "Administrador"));
+router.use(authenticate, authorize("Administrador"));
 
 router.get("/", getAllAccountingMovementsController);
 

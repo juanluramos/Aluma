@@ -5,7 +5,7 @@ import { once } from 'node:events';
 import express from 'express';
 import { OAuth2Client } from 'google-auth-library';
 import { prisma } from '../src/config/prisma.js';
-import { generateToken } from '../src/utils/jwt.js';
+import { startSession } from '../src/services/auth/session.service.js';
 import { authenticateWithOAuth } from '../src/services/auth/oauth.service.js';
 import { createRegistrationToken } from '../src/utils/registration-token.js';
 import solicitudRoutes from '../src/routes/solicitud-alta/routes.js';
@@ -32,10 +32,10 @@ test('SolicitudAlta y OAuth: integracion real de persistencia', async t => {
     const adminRole = await prisma.rolUsuario.findUniqueOrThrow({ where: { nombre_rol: 'Administrador' } });
     const adminIdentity = identity();
     const admin = await prisma.usuario.create({ data: { email: adminIdentity.email, numeroDocumento: `${marker}-admin`, nombre: marker, id_tipo_documento: doc.id_tipo_documento, id_rol: adminRole.id_rol, id_estado_usuario: 1, socio: false, matriculaPagada: false } });
-    const adminToken = generateToken({ id_usuario: admin.id_usuario, rol: 'Administrador' });
+    const adminToken = (await startSession({ id_usuario: admin.id_usuario, rol: 'Administrador' })).token;
     const memberIdentity = identity();
     const member = await prisma.usuario.create({ data: { email: memberIdentity.email, numeroDocumento: `${marker}-member`, nombre: marker, id_tipo_documento: doc.id_tipo_documento, id_rol: 1, id_estado_usuario: 1, socio: false, matriculaPagada: false } });
-    const userToken = generateToken({ id_usuario: member.id_usuario, rol: 'Usuario' });
+    const userToken = (await startSession({ id_usuario: member.id_usuario, rol: 'Usuario' })).token;
     const payload = () => ({ id_tipo_documento: doc.id_tipo_documento, numeroDocumento: `${marker}-${emails.length}`, nombre: marker, socio: true });
     async function submit() {
       const who = identity();

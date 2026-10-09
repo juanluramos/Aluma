@@ -40,6 +40,7 @@ export async function createActivity(
   return client.actividad.create({
     data: {
       titulo: data.titulo,
+      ...(data.aforo !== undefined && { aforo: data.aforo }),
       id_estado_actividad: data.id_estado_actividad,
 
       ...(data.fecha !== undefined && {
@@ -85,6 +86,7 @@ export async function updateActivity(
       ...(data.titulo !== undefined && {
         titulo: data.titulo,
       }),
+      ...(data.aforo !== undefined && { aforo: data.aforo }),
 
       ...(data.fecha !== undefined && {
         fecha: data.fecha,
@@ -122,5 +124,4 @@ export async function deleteActivity(id: number, client: Prisma.TransactionClien
     },
   });
 }
-
 

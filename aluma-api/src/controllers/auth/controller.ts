@@ -1,5 +1,7 @@
 import type { Request, Response } from "express";
 
+import { sendSession, readRefreshCookie } from "./session.controller.js";
+import { endSession } from "../../services/auth/session.service.js";
 import { loginSchema } from "../../dtos/auth/login.dto.js";
 import { loginUser } from "../../services/auth/service.js";
 
@@ -26,5 +28,6 @@ export async function loginController(
 
   const resultLogin = await loginUser(email, password, req.requestId);
 
-  res.status(200).json(resultLogin);
+  await endSession(readRefreshCookie(req));
+  sendSession(req, res, resultLogin);
 }

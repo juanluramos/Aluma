@@ -4,6 +4,7 @@ import type {UpdateUserDto} from "../../dtos/usuario/update-user.dto.js";
 import { AppError } from "../../errors/app-error.js";
 import { prisma } from "../../config/prisma.js";
 import { createAudit } from "../auditoria/service.js";
+import { getIO } from "../../socket/socket.js";
 
 export interface UserCreationAuditContext {
   requestId: string;
@@ -52,24 +53,35 @@ export async function getUser(id: number) {
  * @returns usuario creado.
  */
 
-export async function createNewUser(data: CreateUserDto, context: UserCreationAuditContext) {
-    return prisma.$transaction(async (tx) => {
-        const user = await createUser(data, tx);
-        await createAudit({
-            requestId: context.requestId,
-            id_usuario: context.id_usuario,
-            rol_actor: context.rol_actor,
-            accion: "USUARIO_CREADO",
-            recurso: "USUARIO",
-            id_recurso: user.id_usuario,
-            resultado: "REALIZADA",
-            codigo_error: null,
-            detalles: null,
-        }, tx);
-        return user;
-    });
-}
+export async function createNewUser(
+  data: CreateUserDto,
+  context: UserCreationAuditContext
+) {
+  const user = await prisma.$transaction(async (tx) => {
+    const createdUser = await createUser(data, tx);
 
+    await createAudit(
+      {
+        requestId: context.requestId,
+        id_usuario: context.id_usuario,
+        rol_actor: context.rol_actor,
+        accion: "USUARIO_CREADO",
+        recurso: "USUARIO",
+        id_recurso: createdUser.id_usuario,
+        resultado: "REALIZADA",
+        codigo_error: null,
+        detalles: null,
+      },
+      tx
+    );
+
+    return createdUser;
+  });
+
+  getIO().emit("dashboard:update");
+
+  return user;
+}
 /**
  * Actualiza un usuario existente.
  *
@@ -95,42 +107,80 @@ export async function updateExistingUser(
   data: UpdateUserDto,
   context: UserCreationAuditContext
 ) {
-  return prisma.$transaction(async (tx) => {
-    const anterior = await getUserById(id, tx);
-    if (!anterior) {
-      throw new AppError("Usuario no encontrado", 404, "USER_NOT_FOUND");
-    }
-    const actualizado = await updateUser(id, data, tx);
-    // Lista explicita: nunca incluir credenciales ni copiar el objeto completo.
-    const campos = [
-      "codUsuario", "id_tipo_documento", "numeroDocumento", "nombre",
-      "apellido1", "apellido2", "email", "telefono", "id_rol", "socio",
-      "id_estado_usuario", "matriculaPagada", "comentario",
-    ] as const satisfies readonly (keyof UpdateUserDto)[];
-    const cambios: Record<string, {
-      anterior: string | number | boolean | null;
-      nuevo: string | number | boolean | null;
-    }> = {};
-    for (const campo of campos) {
-      if (anterior[campo] !== actualizado[campo]) {
-        cambios[campo] = { anterior: anterior[campo], nuevo: actualizado[campo] };
+  const actualizado = await prisma.$transaction(
+    async (tx) => {
+      const anterior = await getUserById(id, tx);
+
+      if (!anterior) {
+        throw new AppError(
+          "Usuario no encontrado",
+          404,
+          "USER_NOT_FOUND"
+        );
       }
+
+      const usuarioActualizado = await updateUser(id, data, tx);
+
+      const campos = [
+        "codUsuario",
+        "id_tipo_documento",
+        "numeroDocumento",
+        "nombre",
+        "apellido1",
+        "apellido2",
+        "email",
+        "telefono",
+        "id_rol",
+        "socio",
+        "id_estado_usuario",
+        "matriculaPagada",
+        "comentario",
+      ] as const satisfies readonly (keyof UpdateUserDto)[];
+
+      const cambios: Record<
+        string,
+        {
+          anterior: string | number | boolean | null;
+          nuevo: string | number | boolean | null;
+        }
+      > = {};
+
+      for (const campo of campos) {
+        if (anterior[campo] !== usuarioActualizado[campo]) {
+          cambios[campo] = {
+            anterior: anterior[campo],
+            nuevo: usuarioActualizado[campo],
+          };
+        }
+      }
+
+      if (Object.keys(cambios).length > 0) {
+        await createAudit(
+          {
+            requestId: context.requestId,
+            id_usuario: context.id_usuario,
+            rol_actor: context.rol_actor,
+            accion: "USUARIO_MODIFICADO",
+            recurso: "USUARIO",
+            id_recurso: usuarioActualizado.id_usuario,
+            resultado: "REALIZADA",
+            codigo_error: null,
+            detalles: { cambios },
+          },
+          tx
+        );
+      }
+
+      return usuarioActualizado;
+    },
+    {
+      isolationLevel: "Serializable",
     }
-    if (Object.keys(cambios).length > 0) {
-      await createAudit({
-        requestId: context.requestId,
-        id_usuario: context.id_usuario,
-        rol_actor: context.rol_actor,
-        accion: "USUARIO_MODIFICADO",
-        recurso: "USUARIO",
-        id_recurso: actualizado.id_usuario,
-        resultado: "REALIZADA",
-        codigo_error: null,
-        detalles: { cambios },
-      }, tx);
-    }
-    return actualizado;
-  }, { isolationLevel: "Serializable" });
+  );
+
+  getIO().emit("dashboard:update");
+
+  return actualizado;
 }
 
 /**
@@ -142,24 +192,45 @@ export async function updateExistingUser(
  * @param id - El ID del usuario a eliminar.
  * @returns El usuario eliminado.
  */
-export async function deleteExistingUser(id: number, context: UserCreationAuditContext) {
-  return prisma.$transaction(async (tx) => {
+export async function deleteExistingUser(
+  id: number,
+  context: UserCreationAuditContext
+) {
+  const deleted = await prisma.$transaction(async (tx) => {
     const user = await getUserById(id, tx);
+
     if (!user) {
-      throw new AppError("Usuario no encontrado", 404, "USER_NOT_FOUND");
+      throw new AppError(
+        "Usuario no encontrado",
+        404,
+        "USER_NOT_FOUND"
+      );
     }
-    const deleted = await deleteUser(user.id_usuario, tx);
-    await createAudit({
-      requestId: context.requestId,
-      id_usuario: context.id_usuario,
-      rol_actor: context.rol_actor,
-      accion: "USUARIO_ELIMINADO",
-      recurso: "USUARIO",
-      id_recurso: user.id_usuario,
-      resultado: "REALIZADA",
-      codigo_error: null,
-      detalles: null,
-    }, tx);
-    return deleted;
+
+    const deletedUser = await deleteUser(
+      user.id_usuario,
+      tx
+    );
+
+    await createAudit(
+      {
+        requestId: context.requestId,
+        id_usuario: context.id_usuario,
+        rol_actor: context.rol_actor,
+        accion: "USUARIO_ELIMINADO",
+        recurso: "USUARIO",
+        id_recurso: user.id_usuario,
+        resultado: "REALIZADA",
+        codigo_error: null,
+        detalles: null,
+      },
+      tx
+    );
+
+    return deletedUser;
   });
+
+  getIO().emit("dashboard:update");
+
+  return deleted;
 }

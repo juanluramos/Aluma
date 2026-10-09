@@ -1,3 +1,4 @@
+import { initSocket } from '../src/socket/socket.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
@@ -14,7 +15,7 @@ import { authenticateWithOAuth } from '../src/services/auth/oauth.service.js';
 test('Estados y roles actuales con JWT previo; credenciales separadas', async t => {
   const app = express(); app.use(requestId); app.use(express.json());
   app.use('/auth', authRoutes); app.use('/usuarios', userRoutes); app.use(errorMiddleware);
-  const server = app.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const server = app.listen(0, '127.0.0.1'); initSocket(server); await once(server, 'listening');
   const address = server.address(); assert(address && typeof address !== 'string');
   const marker = `ue-${randomUUID().slice(0, 8)}`;
   const ids: number[] = []; const requests: string[] = [];

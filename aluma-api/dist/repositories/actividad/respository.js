@@ -30,6 +30,7 @@ export async function createActivity(data, client = prisma) {
     return client.actividad.create({
         data: {
             titulo: data.titulo,
+            ...(data.aforo !== undefined && { aforo: data.aforo }),
             id_estado_actividad: data.id_estado_actividad,
             ...(data.fecha !== undefined && {
                 fecha: data.fecha,
@@ -65,6 +66,7 @@ export async function updateActivity(id, data, client = prisma) {
             ...(data.titulo !== undefined && {
                 titulo: data.titulo,
             }),
+            ...(data.aforo !== undefined && { aforo: data.aforo }),
             ...(data.fecha !== undefined && {
                 fecha: data.fecha,
             }),

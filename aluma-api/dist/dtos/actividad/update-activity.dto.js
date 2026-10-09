@@ -7,6 +7,7 @@ import { z } from "zod";
  */
 export const updateActivitySchema = z
     .object({
+    aforo: z.number().int().positive().max(2147483647).optional(),
     /**
      * Título de la actividad.
      */

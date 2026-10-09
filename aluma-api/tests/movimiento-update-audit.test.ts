@@ -73,13 +73,23 @@ test('Modificacion HTTP de movimientos independientes y auditoria atomica', asyn
       assert.equal(login.status, 200);
       actors.push({ id: actor.id_usuario, role, token: login.body.token });
     }
-    for (const actor of actors.slice(0, 2)) {
-      await t.test(`${actor.role}: modificacion, contexto y diferencias reales; repeticion sin auditoria`, async () => {
+    const admin = actors.find(actor => actor.role === 'Administrador')!;
+    const operator = actors.find(actor => actor.role === 'Operador')!;
+    const user = actors.find(actor => actor.role === 'Usuario')!;
+    for (const actor of [operator, admin]) {
+      await t.test(actor.role === 'Administrador' ? 'Administrador: modificacion, contexto y diferencias reales; repeticion sin auditoria' : 'Operador: modificacion rechazada sin cambios ni auditoria', async () => {
         const before = await fixture();
         const path = `/movimientos/${before.id_movimiento}`;
         const body = { id_tipo_movimiento: refundType.id_tipo_movimiento, importe: -12.5,
           fecha: '2026-10-04', concepto: 'Concepto privado nuevo', comentario: null, id_inscripcion: null };
         const result = await request('PUT', path, body, actor.token);
+        if (actor.role === 'Operador') {
+          assert.equal(result.status, 403);
+          assert.equal(result.body.code, 'FORBIDDEN');
+          assert.deepEqual(await prisma.movimientoContable.findUnique({ where: { id_movimiento: before.id_movimiento } }), before);
+          assert.equal(await prisma.auditoria.count({ where: { requestId: result.requestId } }), 0);
+          return;
+        }
         assert.equal(result.status, 200);
         const updated = await prisma.movimientoContable.findUniqueOrThrow({ where: { id_movimiento: before.id_movimiento } });
         assert.equal(updated.importe.toFixed(2), '-12.50');
@@ -112,12 +122,12 @@ test('Modificacion HTTP de movimientos independientes y auditoria atomica', asyn
     await t.test('Solo comentario: diferencias sin texto sensible; sin cambios normalizados no audita', async () => {
       const before = await fixture();
       const path = `/movimientos/${before.id_movimiento}`;
-      const result = await request('PUT', path, { comentario: 'Nuevo texto privado' }, actors[0]!.token);
+      const result = await request('PUT', path, { comentario: 'Nuevo texto privado' }, admin.token);
       assert.equal(result.status, 200);
       const audit = await prisma.auditoria.findFirstOrThrow({ where: { requestId: result.requestId } });
       assert.deepEqual(audit.detalles, { cambios: { comentario: { anterior: '[REDACTADO]', nuevo: '[REDACTADO]' } } });
       const repeated = await request('PUT', path, { comentario: '  Nuevo texto privado  ', importe: 10,
-        fecha: '2026-10-03T00:00:00.000Z', id_inscripcion: null }, actors[0]!.token);
+        fecha: '2026-10-03T00:00:00.000Z', id_inscripcion: null }, admin.token);
       assert.equal(repeated.status, 200);
       assert.equal(await prisma.auditoria.count({ where: { requestId: repeated.requestId } }), 0);
     });
@@ -151,7 +161,7 @@ test('Modificacion HTTP de movimientos independientes y auditoria atomica', asyn
           })) as typeof prisma.$transaction;
         const logMock = subtest.mock.method(console, 'error', () => {});
         try {
-          const result = await request('PUT', `/movimientos/${before.id_movimiento}`, { importe: 15 }, actors[0]!.token);
+          const result = await request('PUT', `/movimientos/${before.id_movimiento}`, { importe: 15 }, admin.token);
           assert.equal(result.status, 500);
           assert.equal(calls, 1);
           assert.equal(inserted, afterInsert);
@@ -172,13 +182,14 @@ test('Modificacion HTTP de movimientos independientes y auditoria atomica', asyn
       const cases = [
         { body: { importe: 11 }, token: undefined, status: 401 },
         { body: { importe: 11 }, token: 'invalid-token', status: 401 },
-        { body: { importe: 11 }, token: actors[2]!.token, status: 403 },
-        { body: {}, token: actors[0]!.token, status: 400 },
-        { body: { fecha: 'invalid' }, token: actors[0]!.token, status: 400 },
-        { body: { importe: -1 }, token: actors[0]!.token, status: 400 },
-        { body: { id_tipo_movimiento: refundType.id_tipo_movimiento }, token: actors[0]!.token, status: 400 },
-        { body: { id_tipo_movimiento: invalidType }, token: actors[0]!.token, status: 404 },
-        { body: { id_inscripcion: 1 }, token: actors[0]!.token, status: 409 },
+        { body: { importe: 11 }, token: operator.token, status: 403 },
+        { body: { importe: 11 }, token: user.token, status: 403 },
+        { body: {}, token: admin.token, status: 400 },
+        { body: { fecha: 'invalid' }, token: admin.token, status: 400 },
+        { body: { importe: -1 }, token: admin.token, status: 400 },
+        { body: { id_tipo_movimiento: refundType.id_tipo_movimiento }, token: admin.token, status: 400 },
+        { body: { id_tipo_movimiento: invalidType }, token: admin.token, status: 404 },
+        { body: { id_inscripcion: 1 }, token: admin.token, status: 409 },
       ];
       for (const item of cases) {
         const result = await request('PUT', `/movimientos/${before.id_movimiento}`, item.body, item.token);
@@ -188,7 +199,7 @@ test('Modificacion HTTP de movimientos independientes y auditoria atomica', asyn
       }
       const absentId = 2147483647;
       assert.equal(await prisma.movimientoContable.findUnique({ where: { id_movimiento: absentId } }), null);
-      const absent = await request('PUT', `/movimientos/${absentId}`, { importe: 11 }, actors[0]!.token);
+      const absent = await request('PUT', `/movimientos/${absentId}`, { importe: 11 }, admin.token);
       assert.equal(absent.status, 404);
       assert.equal(absent.body.code, 'ACCOUNTING_MOVEMENT_NOT_FOUND');
       assert.equal(await prisma.auditoria.count({ where: { requestId: absent.requestId } }), 0);
@@ -200,17 +211,17 @@ test('Modificacion HTTP de movimientos independientes y auditoria atomica', asyn
       const paymentState = await prisma.estadoPago.findUniqueOrThrow({ where: { nombre_estado: 'Pagado' } });
       const enrollmentState = await prisma.estadoInscripcion.findUniqueOrThrow({ where: { nombre: 'Activa' } });
       const enrollment = await prisma.inscripcionActividad.create({ data: {
-        id_usuario: actors[0]!.id, id_actividad: activity.id_actividad,
+        id_usuario: operator.id, id_actividad: activity.id_actividad,
         id_estado_pago: paymentState.id_estado_pago, id_estado_inscripcion: enrollmentState.id_estado_inscripcion,
         apuntadoFecha: new Date('2026-10-03'),
       } });
       enrollmentIds.push(enrollment.id_inscripcion);
       const before = await fixture(enrollment.id_inscripcion);
-      for (const actor of actors.slice(0, 2)) {
+      for (const actor of actors) {
         for (const body of [{ importe: 11 }, { comentario: 'cambio' }, { id_inscripcion: null }]) {
           const result = await request('PUT', `/movimientos/${before.id_movimiento}`, body, actor.token);
-          assert.equal(result.status, 409);
-          assert.equal(result.body.code, 'ENROLLMENT_MOVEMENT_PROTECTED');
+          assert.equal(result.status, actor.role === 'Administrador' ? 409 : 403);
+          assert.equal(result.body.code, actor.role === 'Administrador' ? 'ENROLLMENT_MOVEMENT_PROTECTED' : 'FORBIDDEN');
           assert.deepEqual(await prisma.movimientoContable.findUnique({ where: { id_movimiento: before.id_movimiento } }), before);
           assert.equal(await prisma.auditoria.count({ where: { requestId: result.requestId } }), 0);
         }

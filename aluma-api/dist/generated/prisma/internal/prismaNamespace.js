@@ -80,6 +80,7 @@ export const ModelName = {
     TipoDocumentoIdentificacion: 'TipoDocumentoIdentificacion',
     TipoMovimiento: 'TipoMovimiento',
     Usuario: 'Usuario',
+    SesionAutenticacion: 'SesionAutenticacion',
     EstadoInscripcion: 'EstadoInscripcion',
     Auditoria: 'Auditoria',
     EstadoSolicitud: 'EstadoSolicitud',
@@ -97,6 +98,7 @@ export const TransactionIsolationLevel = runtime.makeStrictEnum({
 export const ActividadScalarFieldEnum = {
     id_actividad: 'id_actividad',
     titulo: 'titulo',
+    aforo: 'aforo',
     fecha: 'fecha',
     importeSocio: 'importeSocio',
     importeNoSocio: 'importeNoSocio',
@@ -192,6 +194,15 @@ export const UsuarioScalarFieldEnum = {
     comentario: 'comentario',
     createAt: 'createAt',
     updateAt: 'updateAt'
+};
+export const SesionAutenticacionScalarFieldEnum = {
+    id: 'id',
+    id_usuario: 'id_usuario',
+    refreshHash: 'refreshHash',
+    createdAt: 'createdAt',
+    lastActivityAt: 'lastActivityAt',
+    expiresAt: 'expiresAt',
+    revokedAt: 'revokedAt'
 };
 export const EstadoInscripcionScalarFieldEnum = {
     id_estado_inscripcion: 'id_estado_inscripcion',
@@ -295,6 +306,10 @@ export const UsuarioOrderByRelevanceFieldEnum = {
     email: 'email',
     telefono: 'telefono',
     comentario: 'comentario'
+};
+export const SesionAutenticacionOrderByRelevanceFieldEnum = {
+    id: 'id',
+    refreshHash: 'refreshHash'
 };
 export const EstadoInscripcionOrderByRelevanceFieldEnum = {
     nombre: 'nombre'

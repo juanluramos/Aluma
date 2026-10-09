@@ -3,7 +3,7 @@ import { createRegistrationToken } from "../../utils/registration-token.js";
 import { findOAuthAccount, createOAuthAccount } from '../../repositories/auth/repository.js';
 import { findUserByEmail } from '../../repositories/usuario/repository.js';
 import { AppError } from '../../errors/app-error.js';
-import { generateToken } from '../../utils/jwt.js';
+import { startSession } from './session.service.js';
 
 
 
@@ -78,14 +78,14 @@ export async function authenticateWithOAuth(
       );
     }
 
-    const token = generateToken({
+    const session = await startSession({
       id_usuario: account.Usuario.id_usuario,
       rol: account.Usuario.RolUsuario.nombre_rol,
     });
 
     return {
       type: "login" as const,
-      token,
+      ...session,
     };
   }
 

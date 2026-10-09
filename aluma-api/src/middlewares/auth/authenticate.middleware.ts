@@ -4,6 +4,8 @@ import jwt from "jsonwebtoken";
 import { JWT_SECRET } from "../../config/jwt.js";
 import { prisma } from "../../config/prisma.js";
 
+import { findActiveSession } from "../../repositories/auth/session.repository.js";
+
 export type Role =
   | "Usuario"
   | "Operador"
@@ -14,6 +16,7 @@ export interface AuthTokenPayload {
   rol: Role;
   iat: number;
   exp: number;
+  sid: string;
 }
 
 /**
@@ -47,6 +50,7 @@ function isValidAuthTokenPayload(
     Number.isSafeInteger(data.id_usuario) &&
     data.id_usuario > 0 &&
     isValidRole(data.rol) &&
+    typeof data.sid === "string" && /^[a-f0-9-]{36}$/.test(data.sid) &&
     typeof data.iat === "number" && Number.isSafeInteger(data.iat) && data.iat >= 0 &&
     typeof data.exp === "number" && Number.isSafeInteger(data.exp) && data.exp > data.iat
   );
@@ -99,7 +103,7 @@ export async function requireAuth(
       return;
     }
 
-    req.user = { id_usuario: payload.id_usuario, rol: payload.rol, iat: payload.iat, exp: payload.exp };
+    req.user = { id_usuario: payload.id_usuario, rol: payload.rol, iat: payload.iat, exp: payload.exp, sid: payload.sid };
 
   } catch {
     res.status(401).json({
@@ -109,6 +113,10 @@ export async function requireAuth(
     return;
   }
   try {
+    if (!await findActiveSession(req.user!.sid, req.user!.id_usuario)) {
+      res.status(401).json({ message: "Sesión caducada o revocada", code: "SESSION_EXPIRED" });
+      return;
+    }
     const user = await prisma.usuario.findUnique({
       where: { id_usuario: req.user!.id_usuario },
       select: { EstadoUsuario: { select: { permiteLogin: true } }, RolUsuario: { select: { nombre_rol: true } } },

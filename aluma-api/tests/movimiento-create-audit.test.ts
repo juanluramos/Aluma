@@ -69,10 +69,13 @@ test('Creacion HTTP de movimientos independientes y auditoria atomica', async (t
       assert.equal(login.status, 200);
       actors.push({ id: actor.id_usuario, role, token: login.body.token });
     }
-    for (const actor of actors.slice(0, 2)) {
-      await t.test(`${actor.role}: HTTP 201, movimiento y unica auditoria con contexto correcto`, async () => {
+    const admin = actors.find(actor => actor.role === 'Administrador')!;
+    const operator = actors.find(actor => actor.role === 'Operador')!;
+    const user = actors.find(actor => actor.role === 'Usuario')!;
+    for (const idInscripcion of [undefined, null]) {
+      await t.test(`Administrador: HTTP 201 con id_inscripcion ${idInscripcion === null ? 'null' : 'omitido'}, movimiento y unica auditoria`, async () => {
         const data = payload();
-        const result = await post('/movimientos', { ...data, ...(actor.role === 'Administrador' && { id_inscripcion: null }) }, actor.token);
+        const result = await post('/movimientos', { ...data, ...(idInscripcion === null && { id_inscripcion: null }) }, admin.token);
         assert.equal(result.status, 201);
         const movements = await prisma.movimientoContable.findMany({ where: { concepto: data.concepto } });
         assert.equal(movements.length, 1);
@@ -82,8 +85,8 @@ test('Creacion HTTP de movimientos independientes y auditoria atomica', async (t
         assert.equal(audits.length, 1);
         const audit = audits[0]!;
         assert.equal(audit.requestId, result.requestId);
-        assert.equal(audit.id_usuario, actor.id);
-        assert.equal(audit.rol_actor, actor.role);
+        assert.equal(audit.id_usuario, admin.id);
+        assert.equal(audit.rol_actor, admin.role);
         assert.equal(audit.accion, 'MOVIMIENTO_CREADO');
         assert.equal(audit.recurso, 'MOVIMIENTO_CONTABLE');
         assert.equal(audit.id_recurso, result.body.id_movimiento);
@@ -124,7 +127,7 @@ test('Creacion HTTP de movimientos independientes y auditoria atomica', async (t
           })) as typeof prisma.$transaction;
         const logMock = subtest.mock.method(console, 'error', () => {});
         try {
-          const result = await post('/movimientos', data, actors[0]!.token);
+          const result = await post('/movimientos', data, admin.token);
           assert.equal(result.status, 500);
           assert.equal(calls, 1);
           assert.equal(inserted, afterInsert);
@@ -144,11 +147,12 @@ test('Creacion HTTP de movimientos independientes y auditoria atomica', async (t
       const cases = [
         { data: payload(), token: undefined, status: 401 },
         { data: payload(), token: 'invalid-token', status: 401 },
-        { data: payload(), token: actors[2]!.token, status: 403 },
-        { data: { ...payload(), fecha: 'invalid' }, token: actors[0]!.token, status: 400 },
-        { data: { ...payload(), importe: -1 }, token: actors[0]!.token, status: 400 },
-        { data: { ...payload(), id_tipo_movimiento: refundType.id_tipo_movimiento }, token: actors[0]!.token, status: 400 },
-        { data: { ...payload(), id_tipo_movimiento: invalidType }, token: actors[0]!.token, status: 404 },
+        { data: payload(), token: operator.token, status: 403 },
+        { data: payload(), token: user.token, status: 403 },
+        { data: { ...payload(), fecha: 'invalid' }, token: admin.token, status: 400 },
+        { data: { ...payload(), importe: -1 }, token: admin.token, status: 400 },
+        { data: { ...payload(), id_tipo_movimiento: refundType.id_tipo_movimiento }, token: admin.token, status: 400 },
+        { data: { ...payload(), id_tipo_movimiento: invalidType }, token: admin.token, status: 404 },
       ];
       for (const item of cases) {
         const result = await post('/movimientos', item.data, item.token);
@@ -157,12 +161,12 @@ test('Creacion HTTP de movimientos independientes y auditoria atomica', async (t
         assert.equal(await prisma.auditoria.count({ where: { requestId: result.requestId } }), 0);
       }
     });
-    await t.test('POST con id_inscripcion rechazado con 409 y sin auditoria de exito', async () => {
-      for (const actor of actors.slice(0, 2)) {
+    await t.test('POST vinculado: Administrador recibe 409; Operador y Usuario reciben 403 sin auditoria', async () => {
+      for (const actor of actors) {
         const data = { ...payload(), id_inscripcion: 1 };
         const result = await post('/movimientos', data, actor.token);
-        assert.equal(result.status, 409);
-        assert.equal(result.body.code, 'ENROLLMENT_MOVEMENT_PROTECTED');
+        assert.equal(result.status, actor.role === 'Administrador' ? 409 : 403);
+        assert.equal(result.body.code, actor.role === 'Administrador' ? 'ENROLLMENT_MOVEMENT_PROTECTED' : 'FORBIDDEN');
         assert.equal(await prisma.movimientoContable.count({ where: { concepto: data.concepto } }), 0);
         assert.equal(await prisma.auditoria.count({ where: { requestId: result.requestId } }), 0);
       }

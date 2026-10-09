@@ -20,6 +20,9 @@ test('Auditoria HTTP: proteccion, validacion y logs sin secretos', async t => {
   prisma.usuario.findUnique = (async () => ({ EstadoUsuario: { permiteLogin: true }, RolUsuario: { nombre_rol: 'Administrador' } })) as typeof original;
   const log = t.mock.method(console, 'log', () => {});
   const errors = t.mock.method(console, 'error', () => {});
+  const findSession = prisma.sesionAutenticacion.findFirst;
+  prisma.sesionAutenticacion.findFirst = (async () => ({ id: '00000000-0000-0000-0000-000000000001' })) as typeof findSession;
+  t.after(() => { prisma.sesionAutenticacion.findFirst = findSession; });
   const app = express(); app.use(requestId); app.use(requestLogger); app.use(express.json({ limit: '1kb' }));
   app.use('/usuarios', userRoutes); app.use('/actividades', activityRoutes);
   app.use('/inscripciones', enrollmentRoutes); app.use('/movimientos', movementRoutes);
@@ -28,7 +31,7 @@ test('Auditoria HTTP: proteccion, validacion y logs sin secretos', async t => {
   app.use(errorMiddleware);
   const server = app.listen(0, '127.0.0.1'); await once(server, 'listening');
   const address = server.address(); assert(address && typeof address !== 'string');
-  const token = generateToken({ id_usuario: 1, rol: 'Administrador' });
+  const token = generateToken({ sid: "00000000-0000-0000-0000-000000000001", id_usuario: 1, rol: 'Administrador' });
   async function request(method: string, path: string, body?: string, authenticated = false) {
     const response = await fetch(`http://127.0.0.1:${address.port}${path}`, {
       method, headers: { 'Content-Type': 'application/json', ...(authenticated && { Authorization: `Bearer ${token}` }) },

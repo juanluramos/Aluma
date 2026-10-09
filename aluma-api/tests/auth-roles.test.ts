@@ -8,6 +8,7 @@ import { JWT_SECRET } from '../src/config/jwt.js';
 import { generateToken } from '../src/utils/jwt.js';
 import { requireAuth, authenticate } from '../src/middlewares/auth/authenticate.middleware.js';
 import { requireRole, authorize } from '../src/middlewares/auth/authorize.middleware.js';
+import accountingRoutes from '../src/routes/movimiento-contable/routes.js';
 import usuarioRoutes from '../src/routes/usuario/routes.js';
 import { createRegistrationToken } from '../src/utils/registration-token.js';
 
@@ -17,23 +18,27 @@ test('Autenticacion y roles reutilizables', async t => {
   prisma.usuario.findUnique = (async () => ({ EstadoUsuario: { permiteLogin: true }, RolUsuario: { nombre_rol: currentRole } })) as typeof findUser;
   t.after(() => { prisma.usuario.findUnique = findUser; });
   assert.equal(authenticate, requireAuth); assert.equal(authorize, requireRole);
+  const findSession = prisma.sesionAutenticacion.findFirst;
+  prisma.sesionAutenticacion.findFirst = (async () => ({ id: '00000000-0000-0000-0000-000000000001' })) as typeof findSession;
+  t.after(() => { prisma.sesionAutenticacion.findFirst = findSession; });
   const app = express(); app.use(express.json());
   app.get('/identity', requireAuth, (req,res) => { res.json(req.user); });
   app.get('/admin', requireAuth, requireRole('Administrador'), (_req,res) => { res.sendStatus(204); });
   app.get('/staff', authenticate, authorize('Operador','Administrador'), (_req,res) => { res.sendStatus(204); });
   app.get('/no-identity', requireRole('Administrador'), (_req,res) => { res.sendStatus(204); });
   app.use('/usuarios', usuarioRoutes);
+  app.use('/contabilidad', accountingRoutes);
   const server = app.listen(0,'127.0.0.1'); await once(server,'listening');
   const address = server.address(); assert(address && typeof address !== 'string');
   async function request(path: string, authorization?: string, method = 'GET') {
-    const response = await fetch(`http://127.0.0.1:${address.port}${path}`, { method, headers: { ...(authorization && { Authorization: authorization }), 'Content-Type':'application/json' }, ...(method === 'POST' && {body:'{}'}) });
+    const response = await fetch(`http://127.0.0.1:${address.port}${path}`, { method, headers: { ...(authorization && { Authorization: authorization }), 'Content-Type':'application/json' }, ...(['POST', 'PUT'].includes(method) && {body: method === 'PUT' ? JSON.stringify({id_estado_usuario: 2}) : '{}'}) });
     return {status:response.status, body:response.status === 204 ? null : await response.json()};
   }
   const now = Math.floor(Date.now()/1000);
   try {
     await t.test('JWT ausente, Bearer mal formado, firma invalida y expiracion', async () => {
       const missing = await request('/identity'); assert.equal(missing.status,401); assert.equal(missing.body.code,'AUTH_TOKEN_REQUIRED');
-      const valid = generateToken({id_usuario:1,rol:'Usuario'});
+      const valid = generateToken({ sid: "00000000-0000-0000-0000-000000000001",id_usuario:1,rol:'Usuario'});
       for (const header of ['Bearer','Basic '+valid,'Bearer '+valid+' extra','Bearer  '+valid,'Bearer invalid', 'Bearer '+jwt.sign({id_usuario:1,rol:'Usuario'},'wrong-secret',{expiresIn:'1h'}), 'Bearer '+jwt.sign({id_usuario:1,rol:'Usuario',iat:now-120,exp:now-60},JWT_SECRET)]) {
         const result = await request('/identity',header); assert.equal(result.status,401); assert.equal(result.body.code,'INVALID_AUTH_TOKEN');
       }
@@ -46,13 +51,21 @@ test('Autenticacion y roles reutilizables', async t => {
       for (const token of [jwt.sign('text',JWT_SECRET), jwt.sign({id_usuario:1,rol:'Usuario'},JWT_SECRET), jwt.sign({id_usuario:1,rol:'Usuario',exp:now+60},JWT_SECRET,{noTimestamp:true})]) {
         assert.equal((await request('/identity','Bearer '+token)).status,401);
       }
-      const result = await request('/identity','Bearer '+jwt.sign({id_usuario:1,rol:'Usuario',extra:'not propagated'},JWT_SECRET,{expiresIn:'1h'}));
-      assert.equal(result.status,200); assert.deepEqual(Object.keys(result.body).sort(),['exp','iat','id_usuario','rol']);
+      const result = await request('/identity','Bearer '+jwt.sign({id_usuario:1,rol:'Usuario',sid:'00000000-0000-0000-0000-000000000001',extra:'not propagated'},JWT_SECRET,{expiresIn:'1h'}));
+      assert.equal(result.status,200); assert.deepEqual(Object.keys(result.body).sort(),['exp','iat','id_usuario','rol','sid']);
+    });
+    await t.test('Operador no cambia estado ni accede a contabilidad', async () => {
+      currentRole = 'Operador';
+      const token = 'Bearer '+generateToken({ sid: "00000000-0000-0000-0000-000000000001", id_usuario: 1, rol: 'Operador' });
+      const update = await request('/usuarios/1', token, 'PUT');
+      assert.equal(update.status, 403);
+      assert.equal(update.body.code, 'FORBIDDEN_FIELDS');
+      assert.equal((await request('/contabilidad', token)).status, 403);
     });
     await t.test('roles permitidos y denegados, aliases compatibles', async () => {
       for (const rol of ['Usuario','Operador','Administrador'] as const) {
         currentRole = rol;
-        const token = 'Bearer '+generateToken({id_usuario:1,rol});
+        const token = 'Bearer '+generateToken({ sid: "00000000-0000-0000-0000-000000000001",id_usuario:1,rol});
         assert.equal((await request('/identity',token)).status,200);
         const admin = await request('/admin',token); assert.equal(admin.status,rol === 'Administrador' ? 204 : 403);
         if (admin.status === 403) assert.equal(admin.body.code,'FORBIDDEN');
@@ -70,7 +83,7 @@ test('Autenticacion y roles reutilizables', async t => {
       assert.equal((await request('/usuarios',undefined,'POST')).status,401);
       for (const rol of ['Usuario','Operador','Administrador'] as const) {
         currentRole = rol;
-        const result = await request('/usuarios','Bearer '+generateToken({id_usuario:1,rol}),'POST');
+        const result = await request('/usuarios','Bearer '+generateToken({ sid: "00000000-0000-0000-0000-000000000001",id_usuario:1,rol}),'POST');
         assert.equal(result.status,rol === 'Usuario' ? 403 : 400);
       }
     });

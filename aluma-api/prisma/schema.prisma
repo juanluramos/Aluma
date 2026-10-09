@@ -10,6 +10,7 @@ datasource db {
 model Actividad {
   id_actividad         Int                    @id @default(autoincrement())
   titulo               String                 @db.VarChar(100)
+  aforo                Int?
   fecha                DateTime?              @db.Date
   importeSocio         Decimal?               @db.Decimal(10, 2)
   importeNoSocio       Decimal?               @db.Decimal(10, 2)
@@ -137,6 +138,7 @@ model TipoMovimiento {
 }
 
 model Usuario {
+  SesionesAutenticacion SesionAutenticacion[]
   SolicitudesResueltas SolicitudAlta[] @relation("AdministradorSolicitud")
   SolicitudOrigen SolicitudAlta? @relation("UsuarioSolicitud")
   id_usuario                  Int                         @id @default(autoincrement())
@@ -164,6 +166,20 @@ model Usuario {
   @@index([id_estado_usuario], map: "fk_usuario_estado")
   @@index([id_rol], map: "fk_usuario_rol")
   @@index([id_tipo_documento], map: "fk_usuario_tipo_documento")
+}
+
+model SesionAutenticacion {
+  id             String   @id @db.Char(36)
+  id_usuario     Int
+  refreshHash    String   @unique @db.Char(64)
+  createdAt      DateTime @default(now()) @db.DateTime(3)
+  lastActivityAt DateTime @db.DateTime(3)
+  expiresAt      DateTime @db.DateTime(3)
+  revokedAt      DateTime? @db.DateTime(3)
+  Usuario        Usuario  @relation(fields: [id_usuario], references: [id_usuario], onDelete: Cascade, onUpdate: Restrict)
+
+  @@index([id_usuario])
+  @@index([expiresAt])
 }
 
 model EstadoInscripcion {

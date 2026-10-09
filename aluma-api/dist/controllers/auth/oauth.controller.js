@@ -4,6 +4,8 @@ import { randomUUID } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from '../../config/jwt.js';
 import { AppError } from '../../errors/app-error.js';
+import { sendSession, readRefreshCookie } from "./session.controller.js";
+import { endSession } from "../../services/auth/session.service.js";
 const stateCookie = 'aluma_oauth_state';
 const cookieOptions = { httpOnly: true, sameSite: 'lax', path: '/api/auth/google', maxAge: 600000 };
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, process.env.GOOGLE_CALLBACK_URL);
@@ -76,7 +78,14 @@ export async function googleCallbackController(req, res, next) {
             return;
         }
         const result = await authenticateWithOAuth("Google", payload.sub, payload.email);
-        res.status(200).json(result);
+        if (result.type === 'login') {
+            await endSession(readRefreshCookie(req));
+            sendSession(req, res, result, { type: result.type });
+        }
+        else {
+            res.setHeader('Cache-Control', 'no-store');
+            res.status(200).json(result);
+        }
     }
     catch (error) {
         next(error);

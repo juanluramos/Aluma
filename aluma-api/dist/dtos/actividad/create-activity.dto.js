@@ -6,6 +6,7 @@ import { z } from "zod";
  * al crear una nueva actividad.
  */
 export const createActivitySchema = z.object({
+    aforo: z.number().int().positive().max(2147483647).optional(),
     /**
      * Titulo de la actividad.
      * En la base de datos es VARCHAR(100).
