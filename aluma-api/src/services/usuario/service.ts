@@ -1,3 +1,6 @@
+import bcrypt from "bcryptjs";
+import { createLocalAccount } from "../../repositories/auth/repository.js";
+import { documentoUsuarioSchema } from "../../utils/validacionesUsuario.js";
 import {getAllUsers, getUserById, createUser, updateUser, deleteUser} from "../../repositories/usuario/repository.js";
 import type {CreateUserDto} from "../../dtos/usuario/create-user.dto.js";
 import type {UpdateUserDto} from "../../dtos/usuario/update-user.dto.js";
@@ -57,8 +60,16 @@ export async function createNewUser(
   data: CreateUserDto,
   context: UserCreationAuditContext
 ) {
+  const passwordHash = data.password === undefined ? undefined : await bcrypt.hash(data.password, 12);
   const user = await prisma.$transaction(async (tx) => {
     const createdUser = await createUser(data, tx);
+    if (passwordHash !== undefined) {
+      await createLocalAccount({
+        id_usuario: createdUser.id_usuario,
+        email: createdUser.email,
+        password_hash: passwordHash,
+      }, tx);
+    }
 
     await createAudit(
       {
@@ -117,6 +128,16 @@ export async function updateExistingUser(
           404,
           "USER_NOT_FOUND"
         );
+      }
+
+      if (data.id_tipo_documento !== undefined || data.numeroDocumento !== undefined) {
+        const documento = documentoUsuarioSchema.safeParse({
+          id_tipo_documento: data.id_tipo_documento ?? anterior.id_tipo_documento,
+          numeroDocumento: data.numeroDocumento ?? anterior.numeroDocumento,
+        });
+        if (!documento.success) {
+          throw new AppError(documento.error.issues[0]!.message, 400, "VALIDATION_ERROR");
+        }
       }
 
       const usuarioActualizado = await updateUser(id, data, tx);

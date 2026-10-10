@@ -144,7 +144,7 @@ model Usuario {
   id_usuario                  Int                         @id @default(autoincrement())
   codUsuario                  String?                     @unique(map: "codUsuario") @db.VarChar(10)
   id_tipo_documento           Int
-  numeroDocumento             String                      @unique(map: "numeroDocumento") @db.VarChar(20)
+  numeroDocumento             String                      @unique(map: "numeroDocumento") @db.VarChar(30)
   nombre                      String                      @db.VarChar(50)
   apellido1                   String?                     @db.VarChar(50)
   apellido2                   String?                     @db.VarChar(50)

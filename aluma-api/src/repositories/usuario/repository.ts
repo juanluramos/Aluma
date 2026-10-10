@@ -73,7 +73,7 @@ export async function createUser(data: CreateUserDto, client: Prisma.Transaction
  */
 
 export interface UpdateUserData {
-    codUsuario?: string;
+    codUsuario?: string | null;
     id_tipo_documento?: number;
     numeroDocumento?: string;
     nombre?: string;

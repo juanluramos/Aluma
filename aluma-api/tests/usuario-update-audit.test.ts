@@ -70,7 +70,7 @@ test('Modificacion HTTP de usuarios y auditoria atomica', async (t) => {
     for (const actor of actors) {
       await t.test(`${actor.role}: actualizacion con una sola auditoria y cambios exactos`, async () => {
         const before = await prisma.usuario.findUniqueOrThrow({ where: { id_usuario: target.id } });
-        const nombre = `${marker}-${actor.role}`;
+        const nombre = `Persona ${actor.role}`;
         const telefono = `60000000${actors.indexOf(actor)}`;
         const result = await request('PUT', path, { nombre, telefono, email: before.email }, actor.token);
         assert.equal(result.status, 200, JSON.stringify(result.body));
@@ -106,7 +106,7 @@ test('Modificacion HTTP de usuarios y auditoria atomica', async (t) => {
     for (const afterInsert of [false, true]) {
       await t.test(`Rollback ${afterInsert ? 'despues' : 'antes'} de insertar auditoria`, async (subtest) => {
         const before = await prisma.usuario.findUniqueOrThrow({ where: { id_usuario: target.id } });
-        const nombre = `${marker}-rollback`;
+        const nombre = 'Persona rollback';
         const failure = new Error('Fallo controlado de auditoria de modificacion');
         const transactionMethod = prisma.$transaction;
         const originalTransaction = transactionMethod.bind(prisma);

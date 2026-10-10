@@ -71,3 +71,12 @@ export async function createOAuthAccount(
     },
   });
 }
+/** Crea una cuenta local con un hash ya calculado, en la transacción del alta. */
+export function createLocalAccount(
+  data: { id_usuario: number; email: string; password_hash: string },
+  client: Prisma.TransactionClient = prisma,
+) {
+  return client.cuentaAutenticacion.create({
+    data: { ...data, proveedor: 'Local' },
+  });
+}

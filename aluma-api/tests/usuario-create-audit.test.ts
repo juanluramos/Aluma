@@ -46,14 +46,14 @@ test('Creacion HTTP de usuarios y auditoria atomica', async (t) => {
 
   try {
     const state = await prisma.estadoUsuario.findFirstOrThrow({ where: { permiteLogin: true } });
-    const document = await prisma.tipoDocumentoIdentificacion.findFirstOrThrow();
+    const document = await prisma.tipoDocumentoIdentificacion.findUniqueOrThrow({ where: { id_tipo_documento: 3 } });
     const userRole = await prisma.rolUsuario.findUniqueOrThrow({ where: { nombre_rol: 'Usuario' } });
     function payload() {
       const email = `${marker}-${emails.length}@aluma.test`;
-      const numeroDocumento = `${marker}-${emails.length}`;
+      const numeroDocumento = `${marker.replace(/-/g, '').toUpperCase()}${emails.length}`;
       emails.push(email);
       return {
-        email, numeroDocumento, nombre: marker, id_tipo_documento: document.id_tipo_documento,
+        email, numeroDocumento, nombre: 'Usuario de prueba', id_tipo_documento: document.id_tipo_documento,
         id_rol: userRole.id_rol, id_estado_usuario: state.id_estado_usuario,
         socio: false, matriculaPagada: false,
       };
