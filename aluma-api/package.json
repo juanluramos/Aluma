@@ -7,7 +7,8 @@
     "dev": "tsx watch src/app.ts",
     "build": "tsc",
     "start": "node dist/app.js",
-    "test": "node --import tsx --test --test-concurrency=1 tests/*.test.ts"
+    "test": "ALUMA_PRUEBAS=1 node --import tsx --test --test-concurrency=1 tests/actividad-aforo.test.ts tests/actividad-aforo-update.test.ts tests/documentos-identidad.test.ts tests/base-de-pruebas.test.ts tests/prisma-guarda.test.ts tests/preparacion-aluma-test.test.ts tests/aislamiento-pruebas.test.ts tests/actividad-ocupacion.test.ts tests/dashboard-presentacion.test.ts tests/contabilidad-resumen.test.ts tests/contabilidad-filtros.test.ts tests/contabilidad-cuotas.test.ts tests/fecha-inscripcion.test.ts tests/cuenta-local-usuario.test.ts tests/cuota-validacion.test.ts tests/configuracion-cuota-validacion.test.ts",
+    "test:integracion": "ALUMA_PRUEBAS=1 ALUMA_AUTORIZAR_PRUEBAS_ALUMA=1 node --import tsx --import ./tests/exigir-base-prueba.ts --test --test-concurrency=1 tests/*.test.ts"
   },
   "keywords": [],
   "author": "",

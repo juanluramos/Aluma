@@ -17,6 +17,7 @@ import { authenticate } from "../../middlewares/auth/authenticate.middleware.js"
 import { authorize } from "../../middlewares/auth/authorize.middleware.js";
 
 import { authorizeUserAccess } from "../../middlewares/auth/authorize-user.middleware.js";
+import { authorizeUserCreate } from "../../middlewares/auth/authorize-user-create.middleware.js";
 import { authorizeUserUpdate } from "../../middlewares/auth/authorize-user-update.middleware.js";
 
 /**
@@ -68,6 +69,7 @@ router.post(
   "/",
   authenticate,
   authorize("Operador", "Administrador"),
+  authorizeUserCreate,
   validateBody(createUserSchema),
   createUserController
 );

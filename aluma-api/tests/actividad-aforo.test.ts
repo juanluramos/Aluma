@@ -10,11 +10,17 @@ for (const [name, schema] of [['create', createActivitySchema], ['update', updat
     for (const aforo of [1, 30, 2147483647]) {
       assert.equal(schema.parse({ ...base, aforo }).aforo, aforo);
     }
-    for (const aforo of [0, -1, 1.5, '30', 'texto', null, true, NaN, Infinity, 2147483648]) {
+    for (const aforo of [0, -1, 1.5, '30', 'texto', true, NaN, Infinity, 2147483648]) {
       assert.equal(schema.safeParse({ ...base, aforo }).success, false, `Aceptado: ${aforo}`);
     }
   });
 }
 test('actualizar únicamente aforo es válido', () => {
   assert.deepEqual(updateActivitySchema.parse({ aforo: 25 }), { aforo: 25 });
+});
+
+test('null elimina el límite en PUT; POST conserva su contrato actual', () => {
+  assert.deepEqual(updateActivitySchema.parse({ aforo: null }), { aforo: null });
+  assert.equal(createActivitySchema.safeParse({ titulo: 'Taller', id_estado_actividad: 1, aforo: null }).success, false);
+  assert.equal(Object.hasOwn(updateActivitySchema.parse({ comentario: null }), 'aforo'), false);
 });

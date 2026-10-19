@@ -6,7 +6,7 @@ import type { NextFunction, Request, Response } from "express";
  * Usuario:
  * - Solo puede modificar sus datos personales.
  *
- * Operador: puede editar datos, pero no estado ni rol.
+ * Operador: puede editar datos y los indicadores Activo, socio y matrícula, pero no el rol.
  * Administrador: puede modificar todos los campos permitidos por el DTO.
  */
 export function authorizeUserUpdate(
@@ -23,10 +23,12 @@ export function authorizeUserUpdate(
     return;
   }
 
-  // Evita cambios de estado y escalada de privilegios mediante edición del rol.
-  if (req.user.rol === "Operador" &&
-      ["id_estado_usuario", "id_rol"].some(field => Object.hasOwn(req.body ?? {}, field))) {
-    res.status(403).json({ message: "No tienes permisos para modificar el estado o rol", code: "FORBIDDEN_FIELDS" });
+  // El rol sigue reservado al administrador. Los checkbox de edición sí los puede cambiar un operador.
+  if (req.user.rol === "Operador" && Object.hasOwn(req.body ?? {}, "id_rol")) {
+    res.status(403).json({
+      message: "No tienes permisos para modificar el rol",
+      code: "FORBIDDEN_FIELDS",
+    });
     return;
   }
 
@@ -39,7 +41,6 @@ export function authorizeUserUpdate(
   }
 
   const allowedFields = [
-    "codUsuario",
     "nombre",
     "apellido1",
     "apellido2",

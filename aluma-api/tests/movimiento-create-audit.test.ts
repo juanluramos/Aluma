@@ -4,6 +4,7 @@ import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import express from 'express';
 import bcrypt from 'bcryptjs';
+import { limpiarPropiedadDePrueba } from '../src/config/aislamiento-pruebas.js';
 import { prisma } from '../src/config/prisma.js';
 import type { Prisma } from '../src/generated/prisma/client.js';
 import movementRoutes from '../src/routes/movimiento-contable/routes.js';
@@ -178,12 +179,7 @@ test('Creacion HTTP de movimientos independientes y auditoria atomica', async (t
     await closed;
     try {
       // Limpieza limitada a los registros creados por esta ejecucion.
-      await prisma.$transaction(async (tx) => {
-        await tx.auditoria.deleteMany({ where: { requestId: { in: requestIds } } });
-        await tx.movimientoContable.deleteMany({ where: { concepto: { in: concepts } } });
-        await tx.cuentaAutenticacion.deleteMany({ where: { id_usuario: { in: ids } } });
-        await tx.usuario.deleteMany({ where: { id_usuario: { in: ids } } });
-      });
+      await limpiarPropiedadDePrueba(prisma);
     } finally { await prisma.$disconnect(); }
   }
 });

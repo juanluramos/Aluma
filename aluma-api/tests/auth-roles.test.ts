@@ -31,7 +31,7 @@ test('Autenticacion y roles reutilizables', async t => {
   const server = app.listen(0,'127.0.0.1'); await once(server,'listening');
   const address = server.address(); assert(address && typeof address !== 'string');
   async function request(path: string, authorization?: string, method = 'GET') {
-    const response = await fetch(`http://127.0.0.1:${address.port}${path}`, { method, headers: { ...(authorization && { Authorization: authorization }), 'Content-Type':'application/json' }, ...(['POST', 'PUT'].includes(method) && {body: method === 'PUT' ? JSON.stringify({id_estado_usuario: 2}) : '{}'}) });
+    const response = await fetch(`http://127.0.0.1:${address.port}${path}`, { method, headers: { ...(authorization && { Authorization: authorization }), 'Content-Type':'application/json' }, ...(['POST', 'PUT'].includes(method) && {body: method === 'PUT' ? JSON.stringify({id_rol: 3}) : '{}'}) });
     return {status:response.status, body:response.status === 204 ? null : await response.json()};
   }
   const now = Math.floor(Date.now()/1000);
@@ -54,7 +54,7 @@ test('Autenticacion y roles reutilizables', async t => {
       const result = await request('/identity','Bearer '+jwt.sign({id_usuario:1,rol:'Usuario',sid:'00000000-0000-0000-0000-000000000001',extra:'not propagated'},JWT_SECRET,{expiresIn:'1h'}));
       assert.equal(result.status,200); assert.deepEqual(Object.keys(result.body).sort(),['exp','iat','id_usuario','rol','sid']);
     });
-    await t.test('Operador no cambia estado ni accede a contabilidad', async () => {
+    await t.test('Operador no cambia el rol ni accede a contabilidad', async () => {
       currentRole = 'Operador';
       const token = 'Bearer '+generateToken({ sid: "00000000-0000-0000-0000-000000000001", id_usuario: 1, rol: 'Operador' });
       const update = await request('/usuarios/1', token, 'PUT');

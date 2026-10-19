@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { esFechaCalendario } from './fechaCalendario.js';
 
 const letrasDocumento = 'TRWAGMYFPDXBNJZSQVHLCKE';
 const mensajeCodigo = 'El código de usuario no tiene un formato válido.';
@@ -7,37 +8,68 @@ const mensajeEmail = 'El email no es válido.';
 const mensajePassword = 'La contraseña no cumple los requisitos de seguridad.';
 
 export const tipoDocumentoSchema = z.number().int().positive().max(2147483647);
+export const fechaInscripcionSchema = z.string().trim().refine(esFechaCalendario, 'La fecha de inscripción no es válida.');
 export const numeroDocumentoSchema = z.string({ error: 'El número de documento es obligatorio.' }).trim().toUpperCase();
 
+function validarDni(numero: string): boolean {
+  return /^\d{8}[A-Z]$/.test(numero)
+    && letrasDocumento[Number(numero.slice(0, 8)) % 23] === numero[8];
+}
+
+function validarNie(numero: string): boolean {
+  return /^[XYZ]\d{7}[A-Z]$/.test(numero)
+    && validarDni(String('XYZ'.indexOf(numero[0]!)) + numero.slice(1));
+}
+
+function validarPermisoTrabajo(numero: string): boolean {
+  // El modelo no distingue NIE de referencia: solo los NIE completos pueden
+  // comprobarse como tales. El resto usa el filtro genérico de ALUMA.
+  if (/^[XYZ]\d{7}[A-Z]$/.test(numero)) return validarNie(numero);
+  return /^[A-Z0-9-]{5,30}$/.test(numero) && /[A-Z0-9]/.test(numero);
+}
+
 export function validarDocumento(
-  data: { id_tipo_documento?: number | undefined; numeroDocumento?: string | undefined },
+  data: { id_tipo_documento?: number | null | undefined; numeroDocumento?: string | null | undefined },
   ctx: z.RefinementCtx,
-) {
+): void {
   const { id_tipo_documento: tipo, numeroDocumento: numero } = data;
-  if (tipo !== undefined && ![1, 2, 3, 4].includes(tipo)) {
+  if (tipo === null && (numero === null || numero === '')) return;
+  if (tipo !== undefined && tipo !== null && ![1, 2, 3, 4].includes(tipo)) {
     ctx.addIssue({ code: 'custom', path: ['id_tipo_documento'], message: 'El tipo de documento no es válido.' });
     return;
   }
-  // In partial updates the service validates the final pair inside its transaction.
-  if (tipo === undefined || numero === undefined) return;
+  // Una actualización parcial deja el par para la transacción del servicio.
+  // null explícito en un solo lado no es un documento completo.
+  if (tipo == null || numero == null || numero === '') {
+    if (tipo !== undefined && numero !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [tipo == null ? 'id_tipo_documento' : 'numeroDocumento'],
+        message: tipo == null
+          ? 'El tipo de documento es obligatorio si indicas un número.'
+          : 'El número de documento es obligatorio si indicas un tipo.',
+      });
+    }
+    return;
+  }
   let valido = false;
   let message: string;
   switch (tipo) {
     case 1:
-      valido = /^\d{8}[A-Z]$/.test(numero) && letrasDocumento[Number(numero.slice(0, 8)) % 23] === numero[8];
+      valido = validarDni(numero);
       message = 'El DNI no es válido.';
       break;
     case 2:
-      valido = /^[XYZ]\d{7}[A-Z]$/.test(numero)
-        && letrasDocumento[Number(String('XYZ'.indexOf(numero[0]!)) + numero.slice(1, 8)) % 23] === numero[8];
+      valido = validarNie(numero);
       message = 'El NIE no es válido.';
       break;
     case 3:
+      // Filtro general de ALUMA; no valida país emisor, MRZ ni autenticidad.
       valido = /^[A-Z0-9]{5,20}$/.test(numero);
       message = 'El pasaporte no tiene un formato válido.';
       break;
     case 4:
-      valido = /^[A-Z0-9-]{5,30}$/.test(numero) && /[A-Z0-9]/.test(numero);
+      valido = validarPermisoTrabajo(numero);
       message = 'El permiso de trabajo no tiene un formato válido.';
       break;
     default:
@@ -82,7 +114,39 @@ export const camposUsuario = {
   id_estado_usuario: z.number().int().positive().max(2147483647),
   matriculaPagada: z.boolean(),
   comentario: z.string().trim().max(500, 'Los comentarios no pueden superar los 500 caracteres.').optional(),
+  fechaInscripcion: fechaInscripcionSchema,
 };
+
+/** Vacío se guarda como NULL para no chocar con la clave única. */
+export const emailOpcionalSchema = z.string().trim().toLowerCase()
+  .transform(value => value === '' ? null : value)
+  .nullable()
+  .optional();
+
+export function validarEmailDeRol(
+  email: string | null | undefined,
+  obligatorio: boolean,
+  ctx: z.RefinementCtx,
+): void {
+  if (!email) {
+    if (obligatorio) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['email'],
+        message: 'El email es obligatorio para un operador o un administrador.',
+      });
+    }
+    return;
+  }
+  const parsed = camposUsuario.email.safeParse(email);
+  if (!parsed.success) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['email'],
+      message: parsed.error.issues[0]!.message,
+    });
+  }
+}
 
 // Do not trim/normalize secrets. Reject bcrypt's truncation boundary in bytes.
 export const passwordUsuarioSchema = z.string({ error: mensajePassword }).refine(value =>

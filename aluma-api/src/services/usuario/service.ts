@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import { createLocalAccount } from "../../repositories/auth/repository.js";
+import { textoFechaCalendario } from "../../utils/fechaCalendario.js";
 import { documentoUsuarioSchema } from "../../utils/validacionesUsuario.js";
 import {getAllUsers, getUserById, createUser, updateUser, deleteUser} from "../../repositories/usuario/repository.js";
 import type {CreateUserDto} from "../../dtos/usuario/create-user.dto.js";
@@ -7,6 +8,7 @@ import type {UpdateUserDto} from "../../dtos/usuario/update-user.dto.js";
 import { AppError } from "../../errors/app-error.js";
 import { prisma } from "../../config/prisma.js";
 import { createAudit } from "../auditoria/service.js";
+import { recalcularPreciosDeUsuario } from "../inscripcion-actividad/recalcular-precios.js";
 import { getIO } from "../../socket/socket.js";
 
 export interface UserCreationAuditContext {
@@ -56,14 +58,62 @@ export async function getUser(id: number) {
  * @returns usuario creado.
  */
 
+/** Solo Operador y Administrador reciben cuenta local. El rol Usuario queda sin acceso. */
+export function rolConCuentaLocal(nombreRol: string): boolean {
+  return nombreRol === "Operador" || nombreRol === "Administrador";
+}
+
+/** Una contraseña enviada al crear un Usuario no abre cuenta. */
+export function passwordDeAlta(nombreRol: string, password: string | undefined): string | undefined {
+  return rolConCuentaLocal(nombreRol) ? password : undefined;
+}
+
+/** La edición solo cambia la cuenta local de quien ya puede iniciar sesión. */
+export function decisionPasswordEdicion(
+  rolActor: string,
+  nombreRolDestino: string,
+  password: string | undefined,
+): "aplicar" | "ignorar" | "prohibido" {
+  if (!password || !rolConCuentaLocal(nombreRolDestino)) return "ignorar";
+  if (rolActor === "Administrador") return "aplicar";
+  if (rolActor === "Operador" && nombreRolDestino === "Operador") return "aplicar";
+  return "prohibido";
+}
+
 export async function createNewUser(
   data: CreateUserDto,
   context: UserCreationAuditContext
 ) {
-  const passwordHash = data.password === undefined ? undefined : await bcrypt.hash(data.password, 12);
+  const rol = await prisma.rolUsuario.findUnique({ where: { id_rol: data.id_rol } });
+  if (!rol) {
+    throw new AppError("El rol no es válido.", 400, "VALIDATION_ERROR");
+  }
+  if (rolConCuentaLocal(rol.nombre_rol) && !data.email) {
+    throw new AppError(
+      "El email es obligatorio para un operador o un administrador.",
+      400,
+      "VALIDATION_ERROR",
+    );
+  }
+  const password = passwordDeAlta(rol.nombre_rol, data.password);
+  if (rolConCuentaLocal(rol.nombre_rol) && password === undefined) {
+    throw new AppError(
+      "La contraseña es obligatoria para un operador o un administrador.",
+      400,
+      "VALIDATION_ERROR",
+    );
+  }
+  const passwordHash = password === undefined ? undefined : await bcrypt.hash(password, 12);
   const user = await prisma.$transaction(async (tx) => {
     const createdUser = await createUser(data, tx);
     if (passwordHash !== undefined) {
+      if (!createdUser.email) {
+        throw new AppError(
+          "El email es obligatorio para un operador o un administrador.",
+          400,
+          "VALIDATION_ERROR",
+        );
+      }
       await createLocalAccount({
         id_usuario: createdUser.id_usuario,
         email: createdUser.email,
@@ -118,6 +168,8 @@ export async function updateExistingUser(
   data: UpdateUserDto,
   context: UserCreationAuditContext
 ) {
+  const password = data.password || undefined;
+  const passwordHash = password === undefined ? undefined : await bcrypt.hash(password, 12);
   const actualizado = await prisma.$transaction(
     async (tx) => {
       const anterior = await getUserById(id, tx);
@@ -131,16 +183,79 @@ export async function updateExistingUser(
       }
 
       if (data.id_tipo_documento !== undefined || data.numeroDocumento !== undefined) {
-        const documento = documentoUsuarioSchema.safeParse({
-          id_tipo_documento: data.id_tipo_documento ?? anterior.id_tipo_documento,
-          numeroDocumento: data.numeroDocumento ?? anterior.numeroDocumento,
-        });
-        if (!documento.success) {
-          throw new AppError(documento.error.issues[0]!.message, 400, "VALIDATION_ERROR");
+        const tipo = data.id_tipo_documento !== undefined ? data.id_tipo_documento : anterior.id_tipo_documento;
+        const numero = data.numeroDocumento !== undefined ? data.numeroDocumento : anterior.numeroDocumento;
+        if (!(tipo == null && numero == null)) {
+          const documento = documentoUsuarioSchema.safeParse({
+            id_tipo_documento: tipo,
+            numeroDocumento: numero,
+          });
+          if (!documento.success) {
+            throw new AppError(documento.error.issues[0]!.message, 400, "VALIDATION_ERROR");
+          }
         }
       }
 
+      const rolDestino = await tx.rolUsuario.findUnique({
+        where: { id_rol: data.id_rol ?? anterior.id_rol },
+      });
+      const emailFinal = data.email !== undefined ? data.email : anterior.email;
+      if (rolDestino && rolConCuentaLocal(rolDestino.nombre_rol) && !emailFinal) {
+        throw new AppError(
+          "El email es obligatorio para un operador o un administrador.",
+          400,
+          "VALIDATION_ERROR",
+        );
+      }
+
       const usuarioActualizado = await updateUser(id, data, tx);
+      let passwordActualizada = false;
+      if (passwordHash !== undefined && password !== undefined) {
+        const rol = await tx.rolUsuario.findUnique({ where: { id_rol: usuarioActualizado.id_rol } });
+        const decision = decisionPasswordEdicion(context.rol_actor, rol?.nombre_rol ?? "", password);
+        if (decision === "prohibido") {
+          throw new AppError("No tienes permisos para cambiar la contraseña", 403, "FORBIDDEN_FIELDS");
+        }
+        if (decision === "aplicar") {
+          const local = await tx.cuentaAutenticacion.findFirst({
+            where: { id_usuario: id, proveedor: "Local" },
+          });
+          if (!usuarioActualizado.email) {
+            throw new AppError(
+              "El email es obligatorio para un operador o un administrador.",
+              400,
+              "VALIDATION_ERROR",
+            );
+          }
+          if (local) {
+            await tx.cuentaAutenticacion.update({
+              where: { id_cuenta: local.id_cuenta },
+              data: { password_hash: passwordHash, email: usuarioActualizado.email },
+            });
+          } else {
+            await createLocalAccount({
+              id_usuario: usuarioActualizado.id_usuario,
+              email: usuarioActualizado.email,
+              password_hash: passwordHash,
+            }, tx);
+          }
+          passwordActualizada = true;
+        }
+      } else if (usuarioActualizado.email && anterior.email !== usuarioActualizado.email) {
+        await tx.cuentaAutenticacion.updateMany({
+          where: { id_usuario: id, proveedor: "Local" },
+          data: { email: usuarioActualizado.email },
+        });
+      }
+
+      if (anterior.socio !== usuarioActualizado.socio) {
+        await recalcularPreciosDeUsuario(
+          usuarioActualizado.id_usuario,
+          usuarioActualizado.socio,
+          tx,
+          context,
+        );
+      }
 
       const campos = [
         "codUsuario",
@@ -175,7 +290,13 @@ export async function updateExistingUser(
         }
       }
 
-      if (Object.keys(cambios).length > 0) {
+      const fechaAnterior = textoFechaCalendario(anterior.fechaInscripcion);
+      const fechaNueva = textoFechaCalendario(usuarioActualizado.fechaInscripcion);
+      if (fechaAnterior !== fechaNueva) {
+        cambios.fechaInscripcion = { anterior: fechaAnterior, nuevo: fechaNueva };
+      }
+
+      if (Object.keys(cambios).length > 0 || passwordActualizada) {
         await createAudit(
           {
             requestId: context.requestId,
@@ -186,7 +307,10 @@ export async function updateExistingUser(
             id_recurso: usuarioActualizado.id_usuario,
             resultado: "REALIZADA",
             codigo_error: null,
-            detalles: { cambios },
+            detalles: {
+              cambios,
+              ...(passwordActualizada && { passwordActualizada: true }),
+            },
           },
           tx
         );
@@ -217,6 +341,14 @@ export async function deleteExistingUser(
   id: number,
   context: UserCreationAuditContext
 ) {
+  if (id === context.id_usuario) {
+    throw new AppError(
+      "No puedes eliminar tu propia cuenta",
+      403,
+      "SELF_DELETION_FORBIDDEN"
+    );
+  }
+
   const deleted = await prisma.$transaction(async (tx) => {
     const user = await getUserById(id, tx);
 

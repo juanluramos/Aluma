@@ -12,6 +12,7 @@ import {
   deleteExistingUser,
 } from "../../services/usuario/service.js";
 import { AppError } from "../../errors/app-error.js";
+import { conFechaInscripcion } from "../../utils/fechaCalendario.js";
 
 
 /**
@@ -32,7 +33,7 @@ export async function getAllUsersController(
   try {
     const users = await getUsers();
 
-    res.status(200).json(users);
+    res.status(200).json(users.map(conFechaInscripcion));
   } catch (error) {
     next(error);
   }
@@ -72,7 +73,7 @@ export async function getUserByIdController(
      */
     const user = await getUser(id);
 
-    res.status(200).json(user);
+    res.status(200).json(conFechaInscripcion(user));
   } catch (error) {
     next(error);
   }
@@ -106,7 +107,7 @@ export async function createUserController(
         rol_actor: req.user.rol,
       });
 
-    res.status(201).json(user);
+    res.status(201).json(conFechaInscripcion(user));
   } catch (error) {
     next(error);
   }
@@ -151,7 +152,7 @@ export async function updateUserController(
         }
       );
 
-    res.status(200).json(user);
+    res.status(200).json(conFechaInscripcion(user));
   } catch (error) {
     next(error);
   }

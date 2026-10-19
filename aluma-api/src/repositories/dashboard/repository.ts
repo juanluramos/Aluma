@@ -1,27 +1,38 @@
 import { prisma } from "../../config/prisma.js";
+import { inicioDeHoy } from "../../services/dashboard/presentacion.js";
+
+async function idPorNombre(
+  modelo: "estadoUsuario" | "estadoActividad",
+  nombre: string,
+): Promise<number | null> {
+  if (modelo === "estadoUsuario") {
+    const estado = await prisma.estadoUsuario.findUnique({
+      where: { nombre_estado: nombre },
+      select: { id_estado_usuario: true },
+    });
+    return estado?.id_estado_usuario ?? null;
+  }
+  const estado = await prisma.estadoActividad.findUnique({
+    where: { nombre_estado: nombre },
+    select: { id_estado_actividad: true },
+  });
+  return estado?.id_estado_actividad ?? null;
+}
 
 export async function getDashboardSummary() {
-  const [
-    usuarios,
-    usuariosActivos,
-    actividadesActivas,
-    inscripciones,
-  ] = await Promise.all([
+  const [usuarios, idUsuarioActivo, idActividadActiva, inscripciones] = await Promise.all([
     prisma.usuario.count(),
-
-    prisma.usuario.count({
-      where: {
-        id_estado_usuario: 1,
-      },
-    }),
-
-    prisma.actividad.count({
-      where: {
-        id_estado_actividad: 1,
-      },
-    }),
-
+    idPorNombre("estadoUsuario", "Activo"),
+    idPorNombre("estadoActividad", "Activo"),
     prisma.inscripcionActividad.count(),
+  ]);
+  const [usuariosActivos, actividadesActivas] = await Promise.all([
+    idUsuarioActivo === null
+      ? Promise.resolve(0)
+      : prisma.usuario.count({ where: { id_estado_usuario: idUsuarioActivo } }),
+    idActividadActiva === null
+      ? Promise.resolve(0)
+      : prisma.actividad.count({ where: { id_estado_actividad: idActividadActiva } }),
   ]);
 
   return {
@@ -33,116 +44,47 @@ export async function getDashboardSummary() {
 }
 
 export async function getUpcomingActivities() {
-  const activities = await prisma.actividad.findMany({
+  return prisma.actividad.findMany({
     where: {
-      fecha: {
-        gte: new Date(),
-      },
-      id_estado_actividad: 1,
+      fecha: { gte: inicioDeHoy() },
+      EstadoActividad: { nombre_estado: "Activo" },
     },
-    orderBy: {
-      fecha: "asc",
-    },
+    orderBy: { fecha: "asc" },
     take: 4,
     select: {
       id_actividad: true,
       titulo: true,
       fecha: true,
       aforo: true,
-      InscripcionActividad: {
-        select: {
-          id_inscripcion: true,
+    },
+  });
+}
+
+export async function getAnnualAttendanceDates(): Promise<Date[]> {
+  const anioActual = new Date().getUTCFullYear();
+  const inscripciones = await prisma.inscripcionActividad.findMany({
+    where: {
+      Actividad: {
+        fecha: {
+          gte: new Date(Date.UTC(anioActual - 1, 0, 1)),
+          lt: new Date(Date.UTC(anioActual + 1, 0, 1)),
         },
       },
     },
+    select: { Actividad: { select: { fecha: true } } },
   });
-
-  return activities.map((activity) => ({
-    id: activity.id_actividad,
-    titulo: activity.titulo,
-    fecha: activity.fecha,
-    aforo: activity.aforo,
-    inscritos: activity.InscripcionActividad.length,
-  }));
-}
-
-export async function getAnnualAttendance() {
-  const currentYear = new Date().getFullYear();
-  const previousYear = currentYear - 1;
-
-  const startPreviousYear = new Date(`${previousYear}-01-01T00:00:00`);
-  const startNextYear = new Date(`${currentYear + 1}-01-01T00:00:00`);
-
-  const registrations = await prisma.inscripcionActividad.findMany({
-    where: {
-      apuntadoFecha: {
-        gte: startPreviousYear,
-        lt: startNextYear,
-      },
-    },
-    select: {
-      apuntadoFecha: true,
-    },
-  });
-
-  const months = [
-    "Ene",
-    "Feb",
-    "Mar",
-    "Abr",
-    "May",
-    "Jun",
-    "Jul",
-    "Ago",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dic",
-  ];
-
-  const result = months.map((month) => ({
-    month,
-    actual: 0,
-    anterior: 0,
-  }));
-
-  for (const registration of registrations) {
-  const date = new Date(registration.apuntadoFecha);
-
-  const year = date.getFullYear();
-  const month = date.getMonth();
-
-  const item = result[month];
-
-  if (!item) {
-    continue;
-  }
-
-  if (year === currentYear) {
-    item.actual++;
-  }
-
-  if (year === previousYear) {
-    item.anterior++;
-  }
-}
-
-  return result;
+  return inscripciones.flatMap((inscripcion) => (
+    inscripcion.Actividad.fecha ? [inscripcion.Actividad.fecha] : []
+  ));
 }
 
 export async function getPaymentStatus() {
   const estados = await prisma.estadoPago.findMany({
     select: {
       nombre_estado: true,
-      _count: {
-        select: {
-          InscripcionActividad: true,
-        },
-      },
+      _count: { select: { InscripcionActividad: true } },
     },
-    orderBy: {
-      id_estado_pago: "asc",
-    },
+    orderBy: { id_estado_pago: "asc" },
   });
 
   return estados.map((estado) => ({
@@ -150,6 +92,3 @@ export async function getPaymentStatus() {
     value: estado._count.InscripcionActividad,
   }));
 }
-
-
-

@@ -5,10 +5,12 @@ import {
   getEnrollmentByIdController,
   createEnrollmentController,
   updateEnrollmentController,
+  activateEnrollmentController,
   deleteEnrollmentController,
 } from "../../controllers/inscripcion-actividad/controller.js";
 
 import { validateBody } from "../../middlewares/validate.middleware.js";
+import { activateEnrollmentSchema } from "../../dtos/inscripcion-actividad/activate-enrollment.dto.js";
 import { createEnrollmentSchema } from "../../dtos/inscripcion-actividad/create-enrollment.dto.js";
 import { updateEnrollmentSchema } from "../../dtos/inscripcion-actividad/update-enrollment.dto.js";
 import { authenticate } from "../../middlewares/auth/authenticate.middleware.js";
@@ -48,6 +50,15 @@ router.post("/", validateBody(createEnrollmentSchema), authorizeEnrollmentCreate
  */
 router.put("/:id", authorize("Operador", "Administrador"), validateBody(updateEnrollmentSchema),
   updateEnrollmentController
+);
+
+/**
+ * Promociona manualmente la primera inscripción en espera.
+ *
+ * PATCH /api/inscripciones/:id/activar
+ */
+router.patch("/:id/activar", authorize("Operador", "Administrador"), validateBody(activateEnrollmentSchema),
+  activateEnrollmentController
 );
 
 /**

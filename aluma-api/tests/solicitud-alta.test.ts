@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import express from 'express';
 import { OAuth2Client } from 'google-auth-library';
+import { limpiarPropiedadDePrueba } from '../src/config/aislamiento-pruebas.js';
 import { prisma } from '../src/config/prisma.js';
 import { startSession } from '../src/services/auth/session.service.js';
 import { authenticateWithOAuth } from '../src/services/auth/oauth.service.js';
@@ -28,7 +29,7 @@ test('SolicitudAlta y OAuth: integracion real de persistencia', async t => {
   }
   function identity() { const email = `${marker}-${emails.length}@aluma.test`; emails.push(email); return { proveedor: 'Google' as const, external_id: email, email }; }
   try {
-    const doc = await prisma.tipoDocumentoIdentificacion.findFirstOrThrow();
+    const doc = await prisma.tipoDocumentoIdentificacion.findUniqueOrThrow({ where: { id_tipo_documento: 3 } });
     const adminRole = await prisma.rolUsuario.findUniqueOrThrow({ where: { nombre_rol: 'Administrador' } });
     const adminIdentity = identity();
     const admin = await prisma.usuario.create({ data: { email: adminIdentity.email, numeroDocumento: `${marker}-admin`, nombre: marker, id_tipo_documento: doc.id_tipo_documento, id_rol: adminRole.id_rol, id_estado_usuario: 1, socio: false, matriculaPagada: false } });
@@ -36,7 +37,7 @@ test('SolicitudAlta y OAuth: integracion real de persistencia', async t => {
     const memberIdentity = identity();
     const member = await prisma.usuario.create({ data: { email: memberIdentity.email, numeroDocumento: `${marker}-member`, nombre: marker, id_tipo_documento: doc.id_tipo_documento, id_rol: 1, id_estado_usuario: 1, socio: false, matriculaPagada: false } });
     const userToken = (await startSession({ id_usuario: member.id_usuario, rol: 'Usuario' })).token;
-    const payload = () => ({ id_tipo_documento: doc.id_tipo_documento, numeroDocumento: `${marker}-${emails.length}`, nombre: marker, socio: true });
+    const payload = () => ({ id_tipo_documento: doc.id_tipo_documento, numeroDocumento: `${marker.replaceAll('-', '').toUpperCase()}${emails.length}`, nombre: marker, socio: true });
     async function submit() {
       const who = identity();
       const response = await request('POST', '/api/solicitudes-alta', createRegistrationToken(who), payload());
@@ -88,6 +89,25 @@ test('SolicitudAlta y OAuth: integracion real de persistencia', async t => {
       assert.equal(account.id_usuario, user.id_usuario); assert.equal(account.password_hash, null);
       const login = await authenticateWithOAuth('Google', who.external_id, who.email); assert.equal(login.type, 'login'); assert('token' in login && login.token);
       assert.equal((await request('POST', `/api/solicitudes-alta/${id}/resolucion`, adminToken, { decision: 'Aceptar' })).status, 409);
+    });
+    await t.test('documentos inválidos se rechazan antes de guardar la solicitud', async () => {
+      const who = identity();
+      const token = createRegistrationToken(who);
+      for (const [id_tipo_documento, numeroDocumento] of [[1, '12345678A'], [2, 'X1234567A'], [3, 'AB<123'], [4, 'X1234567A']] as const) {
+        const result = await request('POST', '/api/solicitudes-alta', token, { ...payload(), id_tipo_documento, numeroDocumento });
+        assert.equal(result.status, 400);
+        assert.equal(await prisma.solicitudAlta.count({ where: { email: who.email } }), 0);
+      }
+    });
+    await t.test('solicitud antigua inválida no crea usuario al aprobarla', async () => {
+      const { who, row } = await submit();
+      await prisma.solicitudAlta.update({ where: { id_solicitud: row.id_solicitud }, data: { id_tipo_documento: 4, numeroDocumento: 'X1234567A' } });
+      const result = await request('POST', `/api/solicitudes-alta/${row.id_solicitud}/resolucion`, adminToken, { decision: 'Aceptar' });
+      assert.equal(result.status, 400);
+      assert.equal(result.body.code, 'VALIDATION_ERROR');
+      assert.equal(await prisma.usuario.count({ where: { email: who.email } }), 0);
+      const saved = await prisma.solicitudAlta.findUniqueOrThrow({ where: { id_solicitud: row.id_solicitud }, include: { EstadoSolicitud: true } });
+      assert.equal(saved.EstadoSolicitud.nombre, 'Pendiente');
     });
     await t.test('rechazo, motivo obligatorio y estado visible sin crear usuario/cuenta', async () => {
       const { who, row } = await submit();
@@ -194,10 +214,6 @@ test('SolicitudAlta y OAuth: integracion real de persistencia', async t => {
     });
   } finally {
     const closed = once(server, 'close'); server.close(); server.closeAllConnections(); await closed;
-    try { await prisma.$transaction(async tx => {
-      await tx.solicitudAlta.deleteMany({ where: { email: { in: emails } } });
-      await tx.cuentaAutenticacion.deleteMany({ where: { email: { in: emails } } });
-      await tx.usuario.deleteMany({ where: { email: { in: emails } } });
-    }); } finally { await prisma.$disconnect(); }
+    try { await limpiarPropiedadDePrueba(prisma); } finally { await prisma.$disconnect(); }
   }
 });

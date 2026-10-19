@@ -95,6 +95,84 @@ test('Modificacion HTTP de usuarios y auditoria atomica', async (t) => {
       });
     }
 
+    await t.test('Usuario no puede editar otro perfil cambiando el ID de la URL', async () => {
+      const other = actors[1]!;
+      const before = await prisma.usuario.findUniqueOrThrow({ where: { id_usuario: other.id } });
+      const result = await request('PUT', `/usuarios/${other.id}`, { nombre: 'Suplantado' }, target.token);
+      assert.equal(result.status, 403);
+      assert.deepEqual(await prisma.usuario.findUnique({ where: { id_usuario: other.id } }), before);
+      assert.equal(await prisma.auditoria.count({ where: { requestId: result.requestId } }), 0);
+    });
+
+    for (const [field, value] of Object.entries({
+      id_rol: 3, id_estado_usuario: state.id_estado_usuario, matriculaPagada: true,
+      socio: true, codUsuario: 'CAMBIO', comentario: 'Administrativo',
+      id_tipo_documento: 3, numeroDocumento: 'ABC12345', password: 'OtraClave123',
+      id_usuario: actors[1]!.id,
+    })) {
+      await t.test(`Usuario: rechaza campo reservado ${field} incluso junto a datos personales`, async () => {
+        const before = await prisma.usuario.findUniqueOrThrow({ where: { id_usuario: target.id } });
+        const result = await request('PUT', path, { nombre: 'No guardar', [field]: value }, target.token);
+        assert.equal(result.status, 403);
+        assert.deepEqual(await prisma.usuario.findUnique({ where: { id_usuario: target.id } }), before);
+        assert.equal(await prisma.auditoria.count({ where: { requestId: result.requestId } }), 0);
+      });
+    }
+
+    for (const field of ['id_rol', 'id_estado_usuario'] as const) {
+      await t.test(`Operador no puede modificar ${field}`, async () => {
+        const before = await prisma.usuario.findUniqueOrThrow({ where: { id_usuario: target.id } });
+        const result = await request('PUT', path, { nombre: 'No guardar', [field]: before[field] }, actors[1]!.token);
+        assert.equal(result.status, 403);
+        assert.deepEqual(await prisma.usuario.findUnique({ where: { id_usuario: target.id } }), before);
+        assert.equal(await prisma.auditoria.count({ where: { requestId: result.requestId } }), 0);
+      });
+    }
+
+    await t.test('Operador conserva permisos administrativos de socio, matrícula y comentario', async () => {
+      const result = await request('PUT', path, { socio: true, matriculaPagada: true, comentario: 'Revisado' }, actors[1]!.token);
+      assert.equal(result.status, 200);
+      assert.equal(result.body.socio, true);
+      assert.equal(result.body.matriculaPagada, true);
+    });
+
+    await t.test('Administrador puede editar todos los perfiles y los campos reservados', async () => {
+      const before = await prisma.usuario.findUniqueOrThrow({ where: { id_usuario: target.id } });
+      const adminRole = await prisma.rolUsuario.findUniqueOrThrow({ where: { nombre_rol: 'Administrador' } });
+      const otherState = await prisma.estadoUsuario.findFirstOrThrow({ where: { id_estado_usuario: { not: before.id_estado_usuario } } });
+      try {
+        const result = await request('PUT', path, { id_rol: adminRole.id_rol, id_estado_usuario: otherState.id_estado_usuario, matriculaPagada: false }, actors[2]!.token);
+        assert.equal(result.status, 200);
+        assert.equal(result.body.id_rol, adminRole.id_rol);
+        assert.equal(result.body.id_estado_usuario, otherState.id_estado_usuario);
+        for (const actor of actors.slice(1)) {
+          const edit = await request('PUT', `/usuarios/${actor.id}`, { nombre: 'Editado por administrador' }, actors[2]!.token);
+          assert.equal(edit.status, 200);
+        }
+      } finally {
+        await prisma.usuario.update({ where: { id_usuario: target.id }, data: { id_rol: before.id_rol, id_estado_usuario: before.id_estado_usuario } });
+      }
+    });
+
+    await t.test('El rol actual en base de datos prevalece sobre un token administrativo anterior', async () => {
+      const operator = actors[1]!;
+      const before = await prisma.usuario.findUniqueOrThrow({ where: { id_usuario: operator.id } });
+      const userRole = await prisma.rolUsuario.findUniqueOrThrow({ where: { nombre_rol: 'Usuario' } });
+      try {
+        await prisma.usuario.update({ where: { id_usuario: operator.id }, data: { id_rol: userRole.id_rol } });
+        const result = await request('PUT', path, { nombre: 'No guardar' }, operator.token);
+        assert.equal(result.status, 403);
+        assert.equal(await prisma.auditoria.count({ where: { requestId: result.requestId } }), 0);
+      } finally {
+        await prisma.usuario.update({ where: { id_usuario: operator.id }, data: { id_rol: before.id_rol } });
+      }
+    });
+
+    await t.test('Sin autenticación no se permite editar perfiles', async () => {
+      const result = await request('PUT', path, { nombre: 'No guardar' });
+      assert.equal(result.status, 401);
+    });
+
     await t.test('Sin cambios reales no se crea auditoria', async () => {
       const before = await prisma.usuario.findUniqueOrThrow({ where: { id_usuario: target.id } });
       const result = await request('PUT', path, { nombre: before.nombre, email: before.email }, target.token);

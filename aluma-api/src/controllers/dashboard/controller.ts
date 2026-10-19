@@ -52,7 +52,7 @@ export async function getAnnualAttendanceController(
     res.status(200).json(attendance);
   } catch (error) {
     console.error(
-      "Error al obtener la asistencia anual:",
+      "Error al obtener las inscripciones por mes:",
       error
     );
 

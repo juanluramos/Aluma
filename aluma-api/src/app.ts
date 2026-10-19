@@ -9,6 +9,12 @@ import authRouter from "./routes/auth/routes.js";
 import { requestLogger } from "./middlewares/request-logger.middleware.js";
 import { requestId } from "./middlewares/request-id.middleware.js";
 import dashboardRoutes from "./routes/dashboard/routes.js";
+import metodoPagoRoutes from "./routes/metodo-pago/routes.js";
+import estadoPagoRoutes from "./routes/estado-pago/routes.js";
+import estadoInscripcionRoutes from "./routes/estado-inscripcion/routes.js";
+import contabilidadRoutes from "./routes/contabilidad/routes.js";
+import cuotaRoutes from "./routes/cuota/routes.js";
+import configuracionCuotaRoutes from "./routes/configuracion-cuota/routes.js";
 import cors from "cors";
 import { FRONTEND_ORIGIN } from "./config/session.js";
 import { createServer } from "http";
@@ -66,6 +72,12 @@ app.use("/api/movimientos", movimientoContableRoutes);
 app.use("/api/auth", authRouter);
 app.use("/api/solicitudes-alta", solicitudAltaRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/metodos-pago", metodoPagoRoutes);
+app.use("/api/estados-pago", estadoPagoRoutes);
+app.use("/api/estados-inscripcion", estadoInscripcionRoutes);
+app.use("/api/contabilidad", contabilidadRoutes);
+app.use("/api/cuotas", cuotaRoutes);
+app.use("/api/configuracion-cuotas", configuracionCuotaRoutes);
 
 
 /**

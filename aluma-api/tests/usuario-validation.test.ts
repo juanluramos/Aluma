@@ -161,6 +161,7 @@ test('Usuarios: validaciones criticas POST/PUT con HTTP y MariaDB', async t => {
       { name: 'Pasaporte corto', data: { numeroDocumento: 'ABC1' }, message: 'El pasaporte no tiene un formato válido.' },
       { name: 'Pasaporte largo', data: { numeroDocumento: 'A'.repeat(21) }, message: 'El pasaporte no tiene un formato válido.' },
       { name: 'Pasaporte caracteres', data: { numeroDocumento: 'ABC-123' }, message: 'El pasaporte no tiene un formato válido.' },
+      { name: 'Permiso NIE letra incorrecta', data: { id_tipo_documento: 4, numeroDocumento: 'X1234567A' }, message: 'El permiso de trabajo no tiene un formato válido.' },
       { name: 'Permiso caracteres', data: { id_tipo_documento: 4, numeroDocumento: 'ABC/123' }, message: 'El permiso de trabajo no tiene un formato válido.' },
       { name: 'Permiso solo guiones', data: { id_tipo_documento: 4, numeroDocumento: '-----' }, message: 'El permiso de trabajo no tiene un formato válido.' },
       { name: 'Permiso corto', data: { id_tipo_documento: 4, numeroDocumento: 'ABC1' }, message: 'El permiso de trabajo no tiene un formato válido.' },
@@ -228,6 +229,16 @@ test('Usuarios: validaciones criticas POST/PUT con HTTP y MariaDB', async t => {
       const after = await prisma.usuario.findUniqueOrThrow({ where: { id_usuario: row.id_usuario } });
       assert.equal(after.numeroDocumento, nextDni); assert.equal(after.id_tipo_documento, 1);
     });
+    await t.test('PUT permiso comprueba NIE al cambiar solo el número o solo el tipo', async () => {
+      const { row } = await create({ id_tipo_documento: 4, numeroDocumento: 'PT-' + marker.toUpperCase() });
+      const path = `/usuarios/${row.id_usuario}`;
+      expectStatus(await request('PUT', path, { numeroDocumento: 'X1234567A' }), 400);
+      assert.equal((await prisma.usuario.findUniqueOrThrow({ where: { id_usuario: row.id_usuario } })).numeroDocumento, row.numeroDocumento);
+      const numeroDocumento = nie();
+      expectStatus(await request('PUT', path, { numeroDocumento: numeroDocumento.toLowerCase() }), 200);
+      expectStatus(await request('PUT', path, { id_tipo_documento: 2 }), 200);
+      assert.equal((await prisma.usuario.findUniqueOrThrow({ where: { id_usuario: row.id_usuario } })).numeroDocumento, numeroDocumento);
+    });
     await t.test('PUT campos invalidos no modifica usuario ni audita exito', async () => {
       const { row } = await create();
       for (const data of [{ email: 'incorrecto' }, { telefono: '12345' }, { codUsuario: 'AB*' }, { nombre: 'Ana3' }, { apellido1: 'A2' }, { comentario: 'x'.repeat(501) }]) {
@@ -257,10 +268,25 @@ test('Usuarios: validaciones criticas POST/PUT con HTTP y MariaDB', async t => {
       expectStatus(result, 409);
       assert.deepEqual(await prisma.usuario.findUnique({ where: { id_usuario: second.row.id_usuario } }), second.row);
     });
-    await t.test('Autorizacion se mantiene: Usuario no crea; Operador no cambia estado ni rol', async () => {
+    await t.test('Autorizacion se mantiene: Usuario no crea; Operador no asigna rol, estado ni condición de socio', async () => {
       expectStatus(await request('POST', '/usuarios', payload(), 'Usuario'), 403);
+      const adminRole = await prisma.rolUsuario.findUniqueOrThrow({ where: { nombre_rol: 'Administrador' } });
+      const inactivo = await prisma.estadoUsuario.findUniqueOrThrow({ where: { nombre_estado: 'Inactivo' } });
+      for (const override of [
+        { id_rol: adminRole.id_rol },
+        { id_estado_usuario: inactivo.id_estado_usuario },
+        { socio: true },
+        { matriculaPagada: true },
+      ]) {
+        expectStatus(await request('POST', '/usuarios', { ...payload(), ...override }, 'Operador'), 403);
+      }
       const { row } = await create();
-      for (const data of [{ id_rol: roleUser.id_rol }, { id_estado_usuario: state.id_estado_usuario }]) {
+      for (const data of [
+        { id_rol: roleUser.id_rol },
+        { id_estado_usuario: state.id_estado_usuario },
+        { socio: true },
+        { matriculaPagada: false },
+      ]) {
         expectStatus(await request('PUT', `/usuarios/${row.id_usuario}`, data, 'Operador'), 403);
       }
     });

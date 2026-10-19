@@ -22,7 +22,7 @@ export const createEnrollmentSchema = z.strictObject({
     .positive().max(2147483647),
 
   /**
-   * Precio aplicado a la inscripción.
+   * El alta no usa este valor. El servicio guarda la tarifa vigente del usuario.
    */
   precioAplicado: z
     .number()

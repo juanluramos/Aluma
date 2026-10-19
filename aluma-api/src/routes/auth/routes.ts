@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import { loginController } from "../../controllers/auth/controller.js";
+import { registroController } from "../../controllers/auth/registro.controller.js";
 import { getMeController } from "../../controllers/auth/me.controller.js";
 import { authenticate } from "../../middlewares/auth/authenticate.middleware.js";
 import { googleLoginController } from "../../controllers/auth/oauth.controller.js";
@@ -12,6 +13,7 @@ import { checkAuthOrigin, requireSessionHeader } from "../../middlewares/auth/se
 const router = Router();
 
 router.post("/login", checkAuthOrigin, loginController);
+router.post("/registro", checkAuthOrigin, registroController);
 router.post("/refresh", checkAuthOrigin, requireSessionHeader, refreshController);
 router.post("/logout", checkAuthOrigin, requireSessionHeader, logoutController);
 router.get("/google/login", googleLoginController);

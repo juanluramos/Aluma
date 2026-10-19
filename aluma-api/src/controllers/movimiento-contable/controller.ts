@@ -12,20 +12,30 @@ import {
   deleteExistingAccountingMovement,
 } from "../../services/movimiento-contable/service.js";
 import { AppError } from "../../errors/app-error.js";
+import { interpretarConsulta } from "../../services/contabilidad/filtros.js";
+import { listarMovimientosContables } from "../../services/contabilidad/service.js";
 
 
 /**
- * Devuelve todos los movimientos contables.
+ * Devuelve los movimientos contables.
+ * Sin parámetros conserva el listado completo. Con filtros, devuelve la página pedida.
  */
 export async function getAllAccountingMovementsController(
-  _req: Request,
+  req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> {
+  const consulta = interpretarConsulta(req.query as Record<string, unknown>);
+  if ("error" in consulta) {
+    res.status(400).json({ message: consulta.error });
+    return;
+  }
   try {
-    const movements = await getAccountingMovements();
-
-    res.status(200).json(movements);
+    if ("vacia" in consulta) {
+      res.status(200).json(await getAccountingMovements());
+      return;
+    }
+    res.status(200).json(await listarMovimientosContables(consulta.filtro, consulta.rango));
   } catch (error) {
     next(error);
   }

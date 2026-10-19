@@ -11,7 +11,18 @@ import type { UpdateActivityDto } from "../../dtos/actividad/update-activity.dto
 
 import { AppError } from "../../errors/app-error.js";
 import { prisma } from "../../config/prisma.js";
+import {
+  getEnrollmentStatusByName,
+  getPaymentStatusByName,
+  lockActivityForEnrollment,
+  occupiedSeatsForUpdate,
+  withEnrollmentTransaction,
+} from "../../repositories/inscripcion-actividad/repository.js";
+import type { EnrollmentTransaction } from "../../repositories/inscripcion-actividad/repository.js";
 import { createAudit } from "../auditoria/service.js";
+import { recalcularPreciosPendientes } from "../inscripcion-actividad/recalcular-precios.js";
+import { contarOcupacionPorActividad } from "../../repositories/actividad/ocupacion.js";
+import { resumirOcupacion } from "./ocupacion.js";
 
 export interface ActivityCreationAuditContext {
   requestId: string;
@@ -25,8 +36,10 @@ export interface ActivityCreationAuditContext {
  * @returns Lista de actividades.
  */
 export async function getActivities() {
- 
-  return getAllActivities();
+  const actividades = await getAllActivities();
+  if (actividades.length === 0) return [];
+  const conteos = await contarOcupacionPorActividad();
+  return resumirOcupacion(actividades, conteos.ocupadas, conteos.espera);
 }
 
 /**
@@ -78,26 +91,67 @@ export async function createNewActivity(
   });
 }
 
+function mensajeAforoInsuficiente(aforo: number, ocupadas: number): string {
+  const plazas = aforo === 1 ? "1 plaza" : `${aforo} plazas`;
+  const ocupadasTexto = ocupadas === 1 ? "1 ocupada" : `${ocupadas} ocupadas`;
+  return `No puedes reducir el aforo a ${plazas} porque actualmente hay ${ocupadasTexto}.`;
+}
+
+// El bloqueo de la actividad va antes del recuento, igual que en el alta y la activación.
+async function rechazarAforoInsuficiente(
+  activityId: number,
+  aforo: number,
+  tx: EnrollmentTransaction,
+) {
+  const pending = await getPaymentStatusByName("Pendiente", tx);
+  const paid = await getPaymentStatusByName("Pagado", tx);
+  if (!pending || !paid) {
+    throw new AppError("Estado Pendiente no encontrado", 500, "PENDING_PAYMENT_STATUS_NOT_FOUND");
+  }
+  const active = await getEnrollmentStatusByName("Activa", tx);
+  if (!active) {
+    throw new AppError("Estado Activa no encontrado", 500, "ACTIVE_ENROLLMENT_STATUS_NOT_FOUND");
+  }
+  const ocupadas = await occupiedSeatsForUpdate(
+    activityId,
+    active.id_estado_inscripcion,
+    [pending.id_estado_pago, paid.id_estado_pago],
+    tx,
+  );
+  if (aforo < ocupadas) {
+    throw new AppError(mensajeAforoInsuficiente(aforo, ocupadas), 409, "AFORO_INSUFICIENTE");
+  }
+}
+
 /**
  * Actualiza una actividad existente.
  *
- * Comprueba primero que la actividad exista.
+ * El primer bloqueo de la transacción es la fila de la actividad.
+ * Si el aforo nuevo es numérico, se compara con las plazas ocupadas
+ * antes de escribir o auditar.
  *
  * @param id - ID de la actividad.
  * @param data - Datos a actualizar.
  * @returns La actividad actualizada.
  *
- * @throws AppError Si la actividad no existe.
+ * @throws AppError Si la actividad no existe o el aforo no cubre las plazas ocupadas.
  */
 export async function updateExistingActivity(
   id: number,
   data: UpdateActivityDto,
   context: ActivityCreationAuditContext
 ) {
-  return prisma.$transaction(async (tx) => {
+  return withEnrollmentTransaction(async (tx) => {
+    const bloqueada = await lockActivityForEnrollment(id, tx);
+    if (!bloqueada) {
+      throw new AppError("Actividad no encontrada", 404, "ACTIVITY_NOT_FOUND");
+    }
     const anterior = await getActivityById(id, tx);
     if (!anterior) {
       throw new AppError("Actividad no encontrada", 404, "ACTIVITY_NOT_FOUND");
+    }
+    if (typeof data.aforo === "number") {
+      await rechazarAforoInsuficiente(id, data.aforo, tx);
     }
     const actualizado = await updateActivity(id, data, tx);
     // Solo campos editables; normalizar fechas y decimales sin perder precision.
@@ -112,6 +166,12 @@ export async function updateExistingActivity(
     });
     const antes = valores(anterior);
     const despues = valores(actualizado);
+    if (antes.importeSocio !== despues.importeSocio || antes.importeNoSocio !== despues.importeNoSocio) {
+      await recalcularPreciosPendientes(actualizado.id_actividad, {
+        importeSocio: actualizado.importeSocio,
+        importeNoSocio: actualizado.importeNoSocio,
+      }, tx, context);
+    }
     const cambios: Record<string, {
       anterior: string | number | null;
       nuevo: string | number | null;
@@ -135,7 +195,7 @@ export async function updateExistingActivity(
       }, tx);
     }
     return actualizado;
-  }, { isolationLevel: "Serializable" });
+  });
 }
 
 /**

@@ -108,6 +108,7 @@ test('Permisos y consistencia contable de inscripciones', async (t) => {
     for (let i = 0; i < 5; i++) {
       const activity = await prisma.actividad.create({ data: {
         titulo: `${marker}-${i}`, id_estado_actividad: activityStatus.id_estado_actividad,
+        importeSocio: 10, importeNoSocio: 25,
       } });
       activities.push(activity.id_actividad);
     }
@@ -139,6 +140,9 @@ test('Permisos y consistencia contable de inscripciones', async (t) => {
       expectStatus(created, 201);
       assert.equal(created.body.id_usuario, ids.Usuario);
       assert.equal(created.body.id_estado_inscripcion, active.id_estado_inscripcion);
+      assert.equal(created.body.id_estado_pago, pending.id_estado_pago);
+      assert.equal(new Prisma.Decimal(created.body.precioAplicado).toFixed(2), '25.00');
+      assert.equal(await prisma.movimientoContable.count({ where: { id_inscripcion: created.body.id_inscripcion } }), 0);
       await checkCreationAudit(created, created.body.id_inscripcion, 'Usuario');
 
       const duplicate = await request('POST', '/inscripciones', 'Usuario', body);
@@ -178,7 +182,18 @@ test('Permisos y consistencia contable de inscripciones', async (t) => {
       expectStatus(rejected, 409);
       assert.equal(rejected.body.code, 'VALID_CHARGE_REQUIRED');
       assert.equal(await prisma.auditoria.count({ where: { requestId: rejected.requestId } }), 0);
-      expectStatus(await request('POST', '/inscripciones', 'Operador', { ...payload(activities[1]!), id_estado_pago: refunded.id_estado_pago }), 409);
+      const altaConCobro = await prisma.actividad.create({ data: {
+        titulo: `${marker}-alta-sin-cobro`, id_estado_actividad: activityStatus.id_estado_actividad,
+        importeSocio: 10, importeNoSocio: 25,
+      } });
+      activities.push(altaConCobro.id_actividad);
+      const sinCobro = await request('POST', '/inscripciones', 'Operador', {
+        ...payload(altaConCobro.id_actividad), ...payment, id_estado_pago: refunded.id_estado_pago, precioAplicado: 1,
+      });
+      expectStatus(sinCobro, 201);
+      assert.equal(sinCobro.body.id_estado_pago, pending.id_estado_pago);
+      assert.equal(new Prisma.Decimal(sinCobro.body.precioAplicado).toFixed(2), '25.00');
+      assert.equal(await prisma.movimientoContable.count({ where: { id_inscripcion: sinCobro.body.id_inscripcion } }), 0);
       expectStatus(await request('POST', '/inscripciones', 'Operador', payload(activities[0]!)), 409);
       expectStatus(await request('PUT', `/inscripciones/${other}`, 'Operador', { id_usuario: ids.Usuario }), 409);
       expectStatus(await request('PUT', `/inscripciones/${owned}`, 'Operador', { id_actividad: 2147483647 }), 404);
@@ -189,23 +204,34 @@ test('Permisos y consistencia contable de inscripciones', async (t) => {
       assert.equal(await prisma.movimientoContable.count({ where: { id_inscripcion: owned } }), 0);
     });
     await t.test('Cambios previos al cobro y transición Cancelado/Pendiente sin movimientos', async () => {
-      expectStatus(await request('PUT', `/inscripciones/${owned}`, 'Operador', {
-        id_estado_pago: cancelled.id_estado_pago, precioAplicado: 30, comentario: 'correccion',
+      const creado = await request('POST', '/inscripciones', 'Operador', payload(activities[2]!, ids.Administrador));
+      expectStatus(creado, 201);
+      const id = creado.body.id_inscripcion as number;
+      expectStatus(await request('PUT', `/inscripciones/${id}`, 'Operador', {
+        id_estado_pago: cancelled.id_estado_pago, comentario: 'correccion',
         id_actividad: activities[1], id_usuario: ids.Administrador,
         id_metodo_pago: method.id_metodo_pago, fechaPago: '2026-10-02',
       }), 200);
-      expectStatus(await request('GET', `/inscripciones/${owned}`, 'Usuario'), 403);
-      const before = await prisma.inscripcionActividad.findUniqueOrThrow({ where: { id_inscripcion: owned } });
-      const rejected = await request('PUT', `/inscripciones/${owned}`, 'Operador', payment);
+      const cancelada = await prisma.inscripcionActividad.findUniqueOrThrow({ where: { id_inscripcion: id } });
+      assert.equal(cancelada.precioAplicado?.toFixed(2), '25.00');
+      assert.equal(cancelada.id_estado_inscripcion, closed.id_estado_inscripcion);
+      assert.equal(cancelada.id_estado_pago, cancelled.id_estado_pago);
+      assert.equal(await prisma.movimientoContable.count({ where: { id_inscripcion: id } }), 0);
+      expectStatus(await request('GET', `/inscripciones/${id}`, 'Usuario'), 403);
+      const before = await prisma.inscripcionActividad.findUniqueOrThrow({ where: { id_inscripcion: id } });
+      const rejected = await request('PUT', `/inscripciones/${id}`, 'Operador', payment);
       expectStatus(rejected, 409);
       assert.equal(rejected.body.code, 'INVALID_PAYMENT_TRANSITION');
-      assert.deepEqual(await prisma.inscripcionActividad.findUniqueOrThrow({ where: { id_inscripcion: owned } }), before);
-      assert.equal(await prisma.movimientoContable.count({ where: { id_inscripcion: owned } }), 0);
+      assert.deepEqual(await prisma.inscripcionActividad.findUniqueOrThrow({ where: { id_inscripcion: id } }), before);
+      assert.equal(await prisma.movimientoContable.count({ where: { id_inscripcion: id } }), 0);
       assert.equal(await prisma.auditoria.count({ where: { requestId: rejected.requestId } }), 0);
-      expectStatus(await request('PUT', `/inscripciones/${owned}`, 'Administrador', {
+      const reactivada = await request('PUT', `/inscripciones/${id}`, 'Administrador', {
         ...payload(activities[0]!), id_metodo_pago: null, fechaPago: null,
-      }), 200);
-      assert.equal(await prisma.movimientoContable.count({ where: { id_inscripcion: owned } }), 0);
+      });
+      expectStatus(reactivada, 409);
+      assert.equal(reactivada.body.code, 'ENROLLMENT_REACTIVATION_FORBIDDEN');
+      assert.deepEqual(await prisma.inscripcionActividad.findUniqueOrThrow({ where: { id_inscripcion: id } }), before);
+      assert.equal(await prisma.movimientoContable.count({ where: { id_inscripcion: id } }), 0);
     });
     await t.test('Cobros concurrentes generan un único movimiento', async () => {
       const before = await prisma.inscripcionActividad.findUniqueOrThrow({ where: { id_inscripcion: owned } });
@@ -397,15 +423,24 @@ test('Permisos y consistencia contable de inscripciones', async (t) => {
       expectStatus(duplicate, 409);
       assert.equal(duplicate.body.code, 'ACTIVE_ENROLLMENT_ALREADY_EXISTS');
     });
-    await t.test('POST pagado crea cobro atómico; error no deja inscripción', async () => {
-      const result = await request('POST', '/inscripciones', 'Administrador', { ...payload(activities[1]!), ...payment });
+    await t.test('El alta ignora precio y cobro enviados por el cliente', async () => {
+      const result = await request('POST', '/inscripciones', 'Administrador', {
+        ...payload(activities[1]!), ...payment, precioAplicado: 99,
+      });
       expectStatus(result, 201);
-      await checkCreationAudit(result, result.body.id_inscripcion, 'Administrador', true);
-      assert.equal(await prisma.movimientoContable.count({ where: { id_inscripcion: result.body.id_inscripcion } }), 1);
-      expectStatus(await request('POST', '/inscripciones', 'Administrador', {
-        ...payload(activities[2]!), ...payment, id_metodo_pago: 2147483647,
-      }), 404);
-      assert.equal(await prisma.inscripcionActividad.count({ where: { id_actividad: activities[2] } }), 0);
+      await checkCreationAudit(result, result.body.id_inscripcion, 'Administrador');
+      assert.equal(result.body.id_estado_pago, pending.id_estado_pago);
+      assert.equal(new Prisma.Decimal(result.body.precioAplicado).toFixed(2), '25.00');
+      assert.equal(result.body.id_metodo_pago, null);
+      assert.equal(result.body.fechaPago, null);
+      assert.equal(await prisma.movimientoContable.count({ where: { id_inscripcion: result.body.id_inscripcion } }), 0);
+      const ignoredMethod = await request('POST', '/inscripciones', 'Administrador', {
+        ...payload(activities[2]!, ids.Operador), ...payment, id_metodo_pago: 2147483647, precioAplicado: 1,
+      });
+      expectStatus(ignoredMethod, 201);
+      assert.equal(ignoredMethod.body.id_estado_pago, pending.id_estado_pago);
+      assert.equal(new Prisma.Decimal(ignoredMethod.body.precioAplicado).toFixed(2), '25.00');
+      assert.equal(await prisma.movimientoContable.count({ where: { id_inscripcion: ignoredMethod.body.id_inscripcion } }), 0);
     });
     await t.test('Creaciones concurrentes no duplican la inscripción activa', async () => {
       const results = await Promise.all(['Operador', 'Administrador'].map((role) =>
@@ -419,17 +454,23 @@ test('Permisos y consistencia contable de inscripciones', async (t) => {
     await t.test('Modificacion administrativa: contexto, diferencias exactas y ausencia de cambios', async (administrativeTest) => {
       const activity = await prisma.actividad.create({ data: {
         titulo: `${marker}-update`, id_estado_actividad: activityStatus.id_estado_actividad,
+        importeSocio: 10, importeNoSocio: 25,
       } });
       activities.push(activity.id_actividad);
       const created = await request('POST', '/inscripciones', 'Operador', payload(activity.id_actividad));
       expectStatus(created, 201);
       const id = created.body.id_inscripcion;
-      const data = { precioAplicado: 30, comentario: '  ajuste  ', fechaPago: '2026-10-02', id_metodo_pago: method.id_metodo_pago,
+      const data = { comentario: '  ajuste  ', fechaPago: '2026-10-02', id_metodo_pago: method.id_metodo_pago,
         id_usuario: ids.Usuario, id_actividad: activity.id_actividad, apuntadoFecha: '2026-10-01', id_estado_pago: pending.id_estado_pago };
       const result = await request('PUT', `/inscripciones/${id}`, 'Administrador', data);
       expectStatus(result, 200);
       const updated = await prisma.inscripcionActividad.findUniqueOrThrow({ where: { id_inscripcion: id } });
-      assert.equal(updated.precioAplicado?.toFixed(2), '30.00');
+      assert.equal(updated.precioAplicado?.toFixed(2), '25.00');
+      const precioRechazado = await request('PUT', `/inscripciones/${id}`, 'Administrador', { precioAplicado: 30 });
+      expectStatus(precioRechazado, 400);
+      assert.equal(precioRechazado.body.code, 'ENROLLMENT_PRICE_LOCKED');
+      assert.equal(await prisma.auditoria.count({ where: { requestId: precioRechazado.requestId } }), 0);
+      assert.equal((await prisma.inscripcionActividad.findUniqueOrThrow({ where: { id_inscripcion: id } })).precioAplicado?.toFixed(2), '25.00');
       const audits = await prisma.auditoria.findMany({ where: { requestId: result.requestId } });
       assert.equal(audits.length, 1);
       const audit = audits[0]!;
@@ -442,7 +483,6 @@ test('Permisos y consistencia contable de inscripciones', async (t) => {
       assert.equal(audit.resultado, 'REALIZADA');
       assert.equal(audit.codigo_error, null);
       assert.deepEqual(audit.detalles, { cambios: {
-        precioAplicado: { anterior: '25.00', nuevo: '30.00' },
         comentario: { modificado: true },
         fechaPago: { anterior: null, nuevo: '2026-10-02' },
         id_metodo_pago: { anterior: null, nuevo: method.id_metodo_pago },
@@ -453,16 +493,16 @@ test('Permisos y consistencia contable de inscripciones', async (t) => {
       assert.equal(await prisma.movimientoContable.count({ where: { id_inscripcion: id } }), 0);
 
       const cleared = await request('PUT', `/inscripciones/${id}`, 'Operador', {
-        precioAplicado: null, fechaPago: null, id_metodo_pago: null, comentario: null,
+        fechaPago: null, id_metodo_pago: null, comentario: null,
       });
       expectStatus(cleared, 200);
       const clearedAudit = await prisma.auditoria.findFirstOrThrow({ where: { requestId: cleared.requestId } });
       assert.deepEqual(clearedAudit.detalles, { cambios: {
-        precioAplicado: { anterior: '30.00', nuevo: null },
         fechaPago: { anterior: '2026-10-02', nuevo: null },
         id_metodo_pago: { anterior: method.id_metodo_pago, nuevo: null },
         comentario: { modificado: true },
       } });
+      assert.equal((await prisma.inscripcionActividad.findUniqueOrThrow({ where: { id_inscripcion: id } })).precioAplicado?.toFixed(2), '25.00');
       const privateComment = 'Dato sensible de prueba que no debe copiarse a auditoria';
       const privateResult = await request('PUT', `/inscripciones/${id}`, 'Operador', { comentario: privateComment });
       expectStatus(privateResult, 200);
@@ -571,10 +611,14 @@ test('Permisos y consistencia contable de inscripciones', async (t) => {
         await t.test(`${isRefund ? 'Devolucion' : 'Cobro'} atomico: ${mode}`, async (subtest) => {
           const activity = await prisma.actividad.create({ data: {
             titulo: `${marker}-${operationKind}-${mode}`, id_estado_actividad: activityStatus.id_estado_actividad,
+            importeSocio: 10, importeNoSocio: 25,
           } });
           activities.push(activity.id_actividad);
-          const created = await request('POST', '/inscripciones', 'Operador', { ...payload(activity.id_actividad), ...(isRefund && payment) });
+          const created = await request('POST', '/inscripciones', 'Operador', payload(activity.id_actividad));
           expectStatus(created, 201);
+          if (isRefund) {
+            expectStatus(await request('PUT', `/inscripciones/${created.body.id_inscripcion}`, 'Operador', payment), 200);
+          }
           const where = { id_inscripcion: created.body.id_inscripcion as number };
           const before = await prisma.inscripcionActividad.findUniqueOrThrow({ where });
           const priorMovements = await prisma.movimientoContable.findMany({ where });
@@ -649,13 +693,14 @@ test('Permisos y consistencia contable de inscripciones', async (t) => {
         });
       }
     }
-    for (const mode of ['pending', 'paid-first', 'paid-second', 'paid-after'] as const) {
+    for (const mode of ['pending', 'con-datos-de-pago'] as const) {
       await t.test(`Auditoria de creacion: rollback completo ${mode}`, async (subtest) => {
         const activity = await prisma.actividad.create({ data: {
           titulo: `${marker}-${mode}`, id_estado_actividad: activityStatus.id_estado_actividad,
+          importeSocio: 10, importeNoSocio: 25,
         } });
         activities.push(activity.id_actividad);
-        const data = { ...payload(activity.id_actividad), ...(mode !== 'pending' && payment) };
+        const data = { ...payload(activity.id_actividad), ...(mode === 'con-datos-de-pago' && payment), precioAplicado: 99 };
         const failure = new Error('Fallo controlado de auditoria de inscripcion');
         const transactionMethod = prisma.$transaction;
         const originalTransaction = transactionMethod.bind(prisma);
@@ -672,12 +717,12 @@ test('Permisos y consistencia contable de inscripciones', async (t) => {
             const row = await tx.inscripcionActividad.findFirstOrThrow({ where: { id_actividad: activity.id_actividad } });
             enrollmentId = row.id_inscripcion;
             assert.equal(args.data.id_recurso, enrollmentId);
-            assert.equal(await tx.movimientoContable.count({ where: { id_inscripcion: enrollmentId } }), mode === 'pending' ? 0 : 1);
+            assert.equal(args.data.accion, 'INSCRIPCION_CREADA');
+            assert.equal(row.precioAplicado?.toFixed(2), '25.00');
+            assert.equal(row.id_estado_pago, pending.id_estado_pago);
+            assert.equal(await tx.movimientoContable.count({ where: { id_inscripcion: enrollmentId } }), 0);
             assert.equal(await prisma.inscripcionActividad.count({ where: { id_actividad: activity.id_actividad } }), 0);
-            if (mode === 'pending' || mode === 'paid-first' || (mode === 'paid-second' && calls === 2)) throw failure;
-            const audit = await createMethod.call(delegate, args);
-            if (mode === 'paid-after' && calls === 2) throw failure;
-            return audit;
+            throw failure;
           }) as typeof delegate.create;
           try { return await operation(tx); }
           finally { delegate.create = createMethod; }
@@ -686,7 +731,7 @@ test('Permisos y consistencia contable de inscripciones', async (t) => {
         try {
           const result = await request('POST', '/inscripciones', 'Administrador', data);
           expectStatus(result, 500);
-          assert.equal(calls, mode === 'pending' || mode === 'paid-first' ? 1 : 2);
+          assert.equal(calls, 1);
           assert(enrollmentId > 0);
           assert(logMock.mock.calls.some(call => String(call.arguments[0]).includes('INTERNAL_SERVER_ERROR')));
           assert(!logMock.mock.calls.some(call => call.arguments.includes(failure)));

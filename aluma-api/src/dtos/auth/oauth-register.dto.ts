@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { tipoDocumentoSchema, numeroDocumentoSchema, validarDocumento } from "../../utils/validacionesUsuario.js";
 
 /**
  * Esquema de validación para el registro de un usuario
@@ -9,16 +10,10 @@ import { z } from "zod";
  * del proceso OAuth ya validado.
  */
 export const oauthRegisterSchema = z.strictObject({
-  id_tipo_documento: z
-    .number()
-    .int()
-    .positive().max(2147483647),
+  id_tipo_documento: tipoDocumentoSchema,
 
-  numeroDocumento: z
-    .string()
-    .trim()
-    .min(1)
-    .max(20),
+  // SolicitudAlta conserva su límite actual de almacenamiento (20).
+  numeroDocumento: numeroDocumentoSchema.max(20),
 
   nombre: z
     .string()
@@ -48,7 +43,7 @@ export const oauthRegisterSchema = z.strictObject({
     .boolean(),
 
 
-});
+}).superRefine(validarDocumento);
 
 /**
  * Tipo TypeScript generado a partir

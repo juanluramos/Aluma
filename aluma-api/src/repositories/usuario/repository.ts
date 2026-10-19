@@ -2,6 +2,7 @@ import {prisma} from "../../config/prisma.js";
 import type { Prisma } from "../../generated/prisma/client.js";
 import type {CreateUserDto} from "../../dtos/usuario/create-user.dto.js";
 import type {UpdateUserDto} from "../../dtos/usuario/update-user.dto.js";
+import { fechaInscripcionAlActualizar, fechaInscripcionAlCrear } from "../../utils/fechaCalendario.js";
 
 
 /**
@@ -39,10 +40,14 @@ export async function getUserById(id: number, client: Prisma.TransactionClient =
 export async function createUser(data: CreateUserDto, client: Prisma.TransactionClient = prisma) {
     return client.usuario.create({
         data: {
-            id_tipo_documento: data.id_tipo_documento,
-            numeroDocumento: data.numeroDocumento,
+            ...(data.id_tipo_documento != null && {
+                id_tipo_documento: data.id_tipo_documento,
+            }),
+            ...(data.numeroDocumento != null && data.numeroDocumento !== '' && {
+                numeroDocumento: data.numeroDocumento,
+            }),
             nombre: data.nombre,
-            email: data.email,
+            ...(data.email ? { email: data.email } : {}),
             id_rol: data.id_rol,
             socio: data.socio,
             matriculaPagada: data.matriculaPagada,
@@ -62,6 +67,7 @@ export async function createUser(data: CreateUserDto, client: Prisma.Transaction
             ...(data.comentario !== undefined && {
                  comentario: data.comentario 
                 }),
+            fechaInscripcion: fechaInscripcionAlCrear(data.fechaInscripcion),
         },
     });
 }
@@ -79,7 +85,7 @@ export interface UpdateUserData {
     nombre?: string;
     apellido1?: string;
     apellido2?: string;
-    email?: string;
+    email?: string | null;
     telefono?: string;
     id_rol?: number;
     socio?: boolean;
@@ -111,6 +117,8 @@ export async function updateUser(
   data: UpdateUserDto,
   client: Prisma.TransactionClient = prisma
 ) {
+  const fechaInscripcion = fechaInscripcionAlActualizar(data.fechaInscripcion);
+
   return client.usuario.update({
     where: {
       id_usuario: id,
@@ -167,6 +175,10 @@ export async function updateUser(
 
       ...(data.comentario !== undefined && {
         comentario: data.comentario,
+      }),
+
+      ...(fechaInscripcion !== undefined && {
+        fechaInscripcion,
       }),
     },
   });

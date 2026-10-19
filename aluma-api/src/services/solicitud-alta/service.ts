@@ -1,4 +1,5 @@
 import { prisma } from '../../config/prisma.js';
+import { documentoUsuarioSchema } from '../../utils/validacionesUsuario.js';
 import { AppError } from '../../errors/app-error.js';
 import { createUser } from '../../repositories/usuario/repository.js';
 import { createOAuthAccount } from '../../repositories/auth/repository.js';
@@ -33,7 +34,12 @@ export async function resolveApplication(id: number, adminId: number, input: Res
     const state = await tx.estadoSolicitud.findUniqueOrThrow({ where: { nombre: input.decision === 'Aceptar' ? 'Aceptada' : 'Rechazada' } });
     let userId: number | null = null;
     if (input.decision === 'Aceptar') {
-      if (await tx.usuario.findFirst({ where: { OR: [{ email: row.email }, { numeroDocumento: row.numeroDocumento }] } }) ||
+      // También comprobar solicitudes anteriores a la validación de entrada.
+      const documento = documentoUsuarioSchema.safeParse(row);
+      if (!documento.success) {
+        throw new AppError(documento.error.issues[0]!.message, 400, 'VALIDATION_ERROR');
+      }
+      if (await tx.usuario.findFirst({ where: { OR: [{ email: row.email }, { numeroDocumento: documento.data.numeroDocumento }] } }) ||
           await tx.cuentaAutenticacion.findFirst({ where: { proveedor: row.proveedor, external_id: row.external_id } })) {
         throw new AppError('Email, documento o identidad ya registrados', 409, 'APPLICATION_IDENTITY_CONFLICT');
       }
@@ -41,7 +47,7 @@ export async function resolveApplication(id: number, adminId: number, input: Res
       const status = await tx.estadoUsuario.findUnique({ where: { id_estado_usuario: 1 } });
       if (role?.nombre_rol !== 'Usuario' || status?.nombre_estado !== 'Activo' || !status.permiteLogin) throw new AppError('Catálogos de alta no válidos', 500, 'APPLICATION_CATALOG_INVALID');
       const user = await createUser({
-        id_tipo_documento: row.id_tipo_documento, numeroDocumento: row.numeroDocumento,
+        id_tipo_documento: documento.data.id_tipo_documento, numeroDocumento: documento.data.numeroDocumento,
         nombre: row.nombre, email: row.email, socio: row.socio,
         id_rol: 1, id_estado_usuario: 1, matriculaPagada: false,
         ...(row.apellido1 !== null && { apellido1: row.apellido1 }),
