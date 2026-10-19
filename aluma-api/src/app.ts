@@ -25,6 +25,10 @@ import { initSocket } from "./socket/socket.js";
  */
 
 const app = express();
+
+app.set("trust proxy", "192.168.1.5");
+app.disable("x-powered-by");
+
 app.use(requestId);
 app.use(requestLogger);
 
