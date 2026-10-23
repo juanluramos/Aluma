@@ -46,6 +46,7 @@ export function authorizeUserUpdate(
     "apellido2",
     "email",
     "telefono",
+    "password",
   ];
 
   // Dejar que Zod responda 400 ante un body ausente o no válido.

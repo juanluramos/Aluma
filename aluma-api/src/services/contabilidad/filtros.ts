@@ -4,11 +4,17 @@ export const TIPOS_MOVIMIENTO = ["Cobro", "Devolución", "Ajuste"] as const;
 
 export type TipoMovimientoNombre = (typeof TIPOS_MOVIMIENTO)[number];
 
+export type SeleccionActividad = {
+  ids: number[];
+  sinActividad: boolean;
+};
+
 export type FiltroContable = {
   desde: string | null;
   hasta: string | null;
   tipo: TipoMovimientoNombre | null;
   q: string | null;
+  actividad: SeleccionActividad | null;
   pagina: number;
   limite: number;
   orden: "asc" | "desc";
@@ -22,7 +28,7 @@ export function interpretarConsulta(query: Record<string, unknown>):
   | { error: string }
   | { vacia: true }
   | { filtro: FiltroContable; rango: RangoFecha | null } {
-  const claves = ["desde", "hasta", "tipo", "q", "pagina", "orden", "limite"];
+  const claves = ["desde", "hasta", "tipo", "q", "actividad", "pagina", "orden", "limite"];
   const vacia = claves.every((clave) => texto(query[clave]) === "");
   if (vacia) return { vacia: true };
 
@@ -30,6 +36,8 @@ export function interpretarConsulta(query: Record<string, unknown>):
   const hasta = texto(query.hasta);
   const tipoTexto = texto(query.tipo);
   const q = texto(query.q);
+  const actividadLeida = leerActividad(texto(query.actividad));
+  if ("error" in actividadLeida) return actividadLeida;
   const ordenTexto = texto(query.orden) || "desc";
   const paginaTexto = texto(query.pagina) || "1";
   const limiteTexto = texto(query.limite) || String(LIMITE);
@@ -53,6 +61,7 @@ export function interpretarConsulta(query: Record<string, unknown>):
       hasta: hasta || null,
       tipo,
       q: q || null,
+      actividad: actividadLeida.actividad,
       pagina,
       limite,
       orden: ordenTexto,
@@ -76,29 +85,86 @@ export function incluirEnResumen(tipo: TipoMovimientoNombre | null) {
 }
 
 export function whereMovimientos(filtro: FiltroContable, rango: RangoFecha | null) {
-  return {
+  return conActividad({
     ...(rango ? { fecha: rango } : {}),
     ...(filtro.tipo ? { TipoMovimiento: { nombre: filtro.tipo } } : {}),
     ...(filtro.q ? { OR: busqueda(filtro.q) } : {}),
-  };
+  }, filtro.actividad);
 }
 
 export function whereTipo(nombre: "Cobro" | "Devolución", filtro: FiltroContable, rango: RangoFecha | null) {
-  return {
+  return conActividad({
     TipoMovimiento: { nombre },
     ...(rango ? { fecha: rango } : {}),
     ...(filtro.q ? { OR: busqueda(filtro.q) } : {}),
-  };
+  }, filtro.actividad);
 }
 
+function palabras(q: string): string[] {
+  return q.split(/\s+/).filter((parte) => parte !== "");
+}
+
+/** Cada palabra tiene que aparecer en el mismo texto, aunque esté en otro campo del nombre. */
 function busqueda(q: string) {
+  const partes = palabras(q);
+  const usuario = {
+    AND: partes.map((parte) => ({
+      OR: [
+        { nombre: { contains: parte } },
+        { apellido1: { contains: parte } },
+        { apellido2: { contains: parte } },
+      ],
+    })),
+  };
   return [
-    { concepto: { contains: q } },
-    { InscripcionActividad: { Usuario: { nombre: { contains: q } } } },
-    { InscripcionActividad: { Usuario: { apellido1: { contains: q } } } },
-    { InscripcionActividad: { Usuario: { apellido2: { contains: q } } } },
-    { InscripcionActividad: { Actividad: { titulo: { contains: q } } } },
+    partes.length === 1
+      ? { concepto: { contains: q } }
+      : { AND: partes.map((parte) => ({ concepto: { contains: parte } })) },
+    { InscripcionActividad: { Usuario: usuario } },
+    partes.length === 1
+      ? { InscripcionActividad: { Actividad: { titulo: { contains: q } } } }
+      : { InscripcionActividad: { Actividad: { AND: partes.map((parte) => ({ titulo: { contains: parte } })) } } },
   ];
+}
+
+function conActividad(
+  where: Record<string, unknown>,
+  actividad: SeleccionActividad | null,
+): Record<string, unknown> {
+  if (!actividad) return where;
+  return { AND: [where, restriccionActividad(actividad)] };
+}
+
+function restriccionActividad(actividad: SeleccionActividad): Record<string, unknown> {
+  const opciones: Record<string, unknown>[] = [];
+  if (actividad.ids.length > 0) {
+    opciones.push({ InscripcionActividad: { id_actividad: { in: actividad.ids } } });
+  }
+  if (actividad.sinActividad) opciones.push({ id_inscripcion: null });
+  if (opciones.length === 0) return { id_movimiento: { in: [] } };
+  if (opciones.length === 1) return opciones[0]!;
+  return { OR: opciones };
+}
+
+function leerActividad(valor: string): { error: string } | { actividad: SeleccionActividad | null } {
+  if (!valor) return { actividad: null };
+  if (valor === "ninguna") return { actividad: { ids: [], sinActividad: false } };
+  const ids: number[] = [];
+  let sinActividad = false;
+  for (const parte of valor.split(",")) {
+    const token = parte.trim();
+    if (!token) continue;
+    if (token === "sin") {
+      sinActividad = true;
+      continue;
+    }
+    if (!/^[1-9]\d*$/.test(token)) return { error: "Actividad no válida." };
+    const id = Number(token);
+    if (!Number.isSafeInteger(id)) return { error: "Actividad no válida." };
+    ids.push(id);
+  }
+  if (ids.length === 0 && !sinActividad) return { error: "Actividad no válida." };
+  return { actividad: { ids, sinActividad } };
 }
 
 function fechaLocal(dia: string): Date {
@@ -146,6 +212,7 @@ export function aniosConceptoCuota(q: string): number[] | "todas" | "ninguno" {
 
 export function whereCuotas(filtro: FiltroContable) {
   if (filtro.tipo && filtro.tipo !== "Cobro") return null;
+  if (filtro.actividad && !filtro.actividad.sinActividad) return null;
   const fechaPago = rangoFechaPago(filtro.desde, filtro.hasta);
   const where: {
     fechaPago?: { gte?: Date; lt?: Date };
@@ -156,11 +223,18 @@ export function whereCuotas(filtro: FiltroContable) {
 
   const concepto = aniosConceptoCuota(filtro.q);
   if (concepto === "todas") return where;
-  const nombres = [
-    { Usuario: { nombre: { contains: filtro.q } } },
-    { Usuario: { apellido1: { contains: filtro.q } } },
-    { Usuario: { apellido2: { contains: filtro.q } } },
-  ];
+  const partes = palabras(filtro.q);
+  const nombres = [{
+    Usuario: {
+      AND: partes.map((parte) => ({
+        OR: [
+          { nombre: { contains: parte } },
+          { apellido1: { contains: parte } },
+          { apellido2: { contains: parte } },
+        ],
+      })),
+    },
+  }];
   where.OR = concepto === "ninguno" ? nombres : [...nombres, { pagoAnio: { in: concepto } }];
   return where;
 }

@@ -212,7 +212,10 @@ export async function updateExistingUser(
       let passwordActualizada = false;
       if (passwordHash !== undefined && password !== undefined) {
         const rol = await tx.rolUsuario.findUnique({ where: { id_rol: usuarioActualizado.id_rol } });
-        const decision = decisionPasswordEdicion(context.rol_actor, rol?.nombre_rol ?? "", password);
+        // Mi perfil: cada persona cambia su propia contraseña, también si su rol es Usuario.
+        const decision = context.id_usuario === id
+          ? "aplicar"
+          : decisionPasswordEdicion(context.rol_actor, rol?.nombre_rol ?? "", password);
         if (decision === "prohibido") {
           throw new AppError("No tienes permisos para cambiar la contraseña", 403, "FORBIDDEN_FIELDS");
         }

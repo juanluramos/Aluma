@@ -140,8 +140,33 @@ test("las cuotas solo acompañan a los cobros y se buscan por socio o año", () 
   assert.equal(where.fechaPago?.lt?.toISOString(), "2026-11-01T00:00:00.000Z");
   assert.equal(JSON.stringify(where.OR).includes("Ana"), true);
 
+  const porNombre = interpretarConsulta({ q: "Juan Soria" });
+  assert.ok(!("error" in porNombre) && !("vacia" in porNombre));
+  const whereNombre = JSON.stringify(whereCuotas(porNombre.filtro));
+  assert.equal(whereNombre.includes("Juan"), true);
+  assert.equal(whereNombre.includes("Soria"), true);
+
   const porAnio = interpretarConsulta({ q: "2026" });
   assert.ok(!("error" in porAnio) && !("vacia" in porAnio));
   const whereAnio = whereCuotas(porAnio.filtro);
   assert.equal(JSON.stringify(whereAnio?.OR).includes("2026"), true);
+});
+
+test("la búsqueda de varias palabras exige cada una en el nombre y el filtro de actividad limita cuotas", () => {
+  const consulta = interpretarConsulta({ q: "Juan Soria", actividad: "4,sin" });
+  assert.ok(!("error" in consulta) && !("vacia" in consulta));
+  assert.deepEqual(consulta.filtro.actividad, { ids: [4], sinActividad: true });
+  const where = JSON.stringify(whereMovimientos(consulta.filtro, consulta.rango));
+  assert.equal(where.includes("Juan"), true);
+  assert.equal(where.includes("Soria"), true);
+  assert.equal(where.includes("id_actividad"), true);
+
+  const soloActividad = interpretarConsulta({ actividad: "4" });
+  assert.ok(!("error" in soloActividad) && !("vacia" in soloActividad));
+  assert.equal(whereCuotas(soloActividad.filtro), null);
+
+  const ninguna = interpretarConsulta({ actividad: "ninguna" });
+  assert.ok(!("error" in ninguna) && !("vacia" in ninguna));
+  assert.equal(JSON.stringify(whereMovimientos(ninguna.filtro, ninguna.rango)).includes("id_movimiento"), true);
+  assert.equal(interpretarConsulta({ actividad: "abc" }).error, "Actividad no válida.");
 });
